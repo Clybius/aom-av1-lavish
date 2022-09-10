@@ -83,18 +83,18 @@ extern "C" {
 // adjust it while we work on documentation.
 /*!\cond */
 // Number of frames required to test for scene cut detection
-#define SCENE_CUT_KEY_TEST_INTERVAL 16
+#define SCENE_CUT_KEY_TEST_INTERVAL 24
 
 // Lookahead index threshold to enable temporal filtering for second arf.
 #define TF_LOOKAHEAD_IDX_THR 7
 
 #define HDR_QP_LEVELS 10
-#define CHROMA_CB_QP_SCALE 1.04
-#define CHROMA_CR_QP_SCALE 1.04
+#define CHROMA_CB_QP_SCALE 1.39
+#define CHROMA_CR_QP_SCALE 1.39
 #define CHROMA_QP_SCALE -0.46
 #define CHROMA_QP_OFFSET 9.26
 #define QP_SCALE_FACTOR 2.0
-#define DISABLE_HDR_LUMA_DELTAQ 1
+#define CHROMA_DQP_MAX 80
 
 // Rational number with an int64 numerator
 // This structure holds a fractional value
@@ -804,6 +804,12 @@ typedef struct {
   int sharpness;
 
   /*!
+   * ClybPatch -- Controls the level at which quantization favours sharpness in the block. Has no impact on RD when set
+   * to zero (default). For values 1-7, quantization is adjusted in favour of block sharpness.
+   */
+  int quant_sharpness;
+
+  /*!
    * Indicates the trellis optimization mode of quantized coefficients.
    * 0: disabled
    * 1: enabled
@@ -1058,6 +1064,23 @@ typedef struct AV1EncoderConfig {
 
   // Max depth for the GOP after a key frame
   int kf_max_pyr_height;
+  
+  // ClybPatch -- Add a modifiable parameter for modifying deltaq-mode=1's perceptual modulation via the interface
+  int dq_modulate;
+  // ClybPatch -- Add a modifiable parameter for modifying enable-tpl-model's effectiveness via the interface (Very WIP)
+  int tpl_strength;
+  // ClybPatch -- Add modifiable parameters for modifying the TPL model's upwards or downwards quantization (Very WIP, advanced)
+  int tpl_strength_pos;
+
+  int tpl_strength_neg;
+
+  int vmaf_motion_mult;
+
+  int ssim_rd_mult;
+
+  int luma_bias;
+
+  int chroma_q_offset;
   /*!\endcond */
 } AV1EncoderConfig;
 
@@ -3411,11 +3434,6 @@ typedef struct AV1_COMP {
    * Struct for the reference structure for RTC.
    */
   RTC_REF rtc_ref;
-
-  /*!
-   * Block level thresholds to force zeromv-skip at partition level.
-   */
-  unsigned int zeromv_skip_thresh_exit_part[BLOCK_SIZES_ALL];
 } AV1_COMP;
 
 /*!
@@ -4070,12 +4088,6 @@ static INLINE int is_frame_resize_pending(const AV1_COMP *const cpi) {
   return (resize_pending_params->width && resize_pending_params->height &&
           (cpi->common.width != resize_pending_params->width ||
            cpi->common.height != resize_pending_params->height));
-}
-
-// Check if CDEF is used.
-static INLINE int is_cdef_used(const AV1_COMMON *const cm) {
-  return cm->seq_params->enable_cdef && !cm->features.coded_lossless &&
-         !cm->tiles.large_scale;
 }
 
 // Check if loop restoration filter is used.

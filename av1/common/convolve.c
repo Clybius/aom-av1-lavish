@@ -567,28 +567,6 @@ void av1_convolve_2d_facade(const uint8_t *src, int src_stride, uint8_t *dst,
   const InterpFilterParams *filter_params_x = interp_filters[0];
   const InterpFilterParams *filter_params_y = interp_filters[1];
 
-  // TODO(jingning, yunqing): Add SIMD support to 2-tap filter case.
-  // Do we have SIMD support to 4-tap case?
-  // 2-tap filter indicates that it is for IntraBC.
-  if (filter_params_x->taps == 2 || filter_params_y->taps == 2) {
-    assert(filter_params_x->taps == 2 && filter_params_y->taps == 2);
-    assert(!scaled);
-    if (subpel_x_qn && subpel_y_qn) {
-      av1_convolve_2d_sr_c(src, src_stride, dst, dst_stride, w, h,
-                           filter_params_x, filter_params_y, subpel_x_qn,
-                           subpel_y_qn, conv_params);
-      return;
-    } else if (subpel_x_qn) {
-      av1_convolve_x_sr_c(src, src_stride, dst, dst_stride, w, h,
-                          filter_params_x, subpel_x_qn, conv_params);
-      return;
-    } else if (subpel_y_qn) {
-      av1_convolve_y_sr_c(src, src_stride, dst, dst_stride, w, h,
-                          filter_params_y, subpel_y_qn);
-      return;
-    }
-  }
-
   if (scaled) {
     convolve_2d_scale_wrapper(src, src_stride, dst, dst_stride, w, h,
                               filter_params_x, filter_params_y, subpel_x_qn,

@@ -589,7 +589,7 @@ void av1_apply_temporal_filter_c(
   }
   // Smaller strength -> smaller filtering weight.
   double s_decay = pow((double)filter_strength / TF_STRENGTH_THRESHOLD, 2);
-  s_decay = CLIP(s_decay, 1e-5, 1);
+  s_decay = CLIP(s_decay, 1e-5, 1.2);
   for (int plane = 0; plane < num_planes; plane++) {
     // Larger noise -> larger filtering weight.
     const double n_decay = 0.5 + log(2 * noise_levels[plane] + 5.0);
@@ -810,7 +810,36 @@ void av1_tf_do_filtering_row(AV1_COMP *cpi, ThreadData *td, int mb_row) {
   uint8_t *pred = tf_data->pred;
 
   // Factor to control the filering strength.
-  const int filter_strength = cpi->oxcf.algo_cfg.arnr_strength;
+  int filter_strength = cpi->oxcf.algo_cfg.arnr_strength;
+
+  // For psy modes, considerbly reducing temporal filtering helps with fine
+  // detail retention and gains higher fidelity. No temporal filtering would
+  // be a good option, but currently, current rate control
+  // and low usage of sharp inter/intra and prediction modes
+  // make it unwise to apply to all content. Therefore, unless the user is
+  // competent enough to change temporal filtering parameters by themselves,
+  // a temporal filtering strength of 2 has been provided to offer
+  // the most balanced default results.
+  if ((cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY ||
+      cpi->oxcf.tune_cfg.content == AOM_CONTENT_ANIMATION) &&
+      cpi->oxcf.algo_cfg.arnr_strength == 5) {
+    filter_strength = 2;
+
+  // Trust the user otherwise
+  } else {
+    filter_strength = cpi->oxcf.algo_cfg.arnr_strength;
+  }
+
+  // https://bugs.chromium.org/p/aomedia/issues/detail?id=3211 seems to be
+  // resolved by lowering the filtering strength to 1 on keyframes,
+  // while still providing considerable compression benefits.
+  FRAME_UPDATE_TYPE update_type =
+      get_frame_update_type(&cpi->ppi->gf_group, cpi->gf_frame_index);
+  if (update_type == KF_UPDATE &&
+      cpi->oxcf.kf_cfg.enable_keyframe_filtering == 1 &&
+      cpi->oxcf.algo_cfg.arnr_strength >= 2) {
+    filter_strength = 1;
+  }
 
   // Do filtering.
   FRAME_DIFF *diff = &td->tf_data.diff;
@@ -1032,11 +1061,27 @@ static void tf_setup_filtering_buffer(AV1_COMP *cpi,
   // change the number of frames for key frame filtering, which is to avoid
   // visual quality drop.
   int adjust_num = 6;
-  if (num_frames == 1) {  // `arnr_max_frames = 1` is used to disable filtering.
+  if (num_frames == 1 || num_frames == 0) {  // `arnr_max_frames = 0/1` is used to disable filtering.
     adjust_num = 0;
+
+  } //If it's not a KF, still adjust the number of filtering frames by 1
+    else if ((update_type != KF_UPDATE) &&
+    (cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY)) {
+    adjust_num = 1;
+  }
+    //If it is a KF, do not adjust it for maximum consistency
+    else if ((update_type == KF_UPDATE) &&
+    (cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY)) {
+    adjust_num = 0;
+
   } else if ((update_type == KF_UPDATE) && q <= 10) {
     adjust_num = 0;
   }
+
+  if ((update_type == KF_UPDATE) && num_frames == 0) {
+    num_frames = 1;
+      }
+
   num_frames = AOMMIN(num_frames + adjust_num, lookahead_depth);
 
   if (frame_type == KEY_FRAME) {

@@ -432,8 +432,8 @@ if ($opts{arch} eq 'x86') {
   @ALL_ARCHS = filter(qw/neon/);
   arm;
 } elsif ($opts{arch} eq 'arm64' ) {
-  @ALL_ARCHS = filter(qw/neon arm_crc32/);
-  &require(@ALL_ARCHS);
+  @ALL_ARCHS = filter(qw/neon/);
+  &require("neon");
   arm;
 } elsif ($opts{arch} eq 'ppc') {
   @ALL_ARCHS = filter(qw/vsx/);

@@ -178,11 +178,14 @@ SIMD_INLINE v64 v64_pack_s32_u16(v64 a, v64 b) {
   __m128i t = _mm_unpacklo_epi64(b, a);
   return _mm_packus_epi32(t, t);
 #else
-  const int32_t ah = SIMD_CLAMP(v64_high_s32(a), 0, 65535);
-  const int32_t al = SIMD_CLAMP(v64_low_s32(a), 0, 65535);
-  const int32_t bh = SIMD_CLAMP(v64_high_s32(b), 0, 65535);
-  const int32_t bl = SIMD_CLAMP(v64_low_s32(b), 0, 65535);
-  return v64_from_16(ah, al, bh, bl);
+  int32_t ah = v64_high_s32(a);
+  int32_t al = v64_low_s32(a);
+  int32_t bh = v64_high_s32(b);
+  int32_t bl = v64_low_s32(b);
+  return v64_from_16(ah > 65535 ? 65535 : ah < 0 ? 0 : ah,
+                     al > 65535 ? 65535 : al < 0 ? 0 : al,
+                     bh > 65535 ? 65535 : bh < 0 ? 0 : bh,
+                     bl > 65535 ? 65535 : bl < 0 ? 0 : bl);
 #endif
 }
 

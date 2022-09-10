@@ -711,7 +711,6 @@ TEST_P(SADTest, ShortSrc) {
     FillRandom(source_data_, source_stride_);
     FillRandom(reference_data_, reference_stride_);
     CheckSAD();
-    if (testing::Test::HasFatalFailure()) break;
     test_count -= 1;
   }
   source_stride_ = tmp_stride;
@@ -766,7 +765,6 @@ TEST_P(SADSkipTest, ShortSrc) {
     FillRandom(source_data_, source_stride_);
     FillRandom(reference_data_, reference_stride_);
     CheckSAD();
-    if (testing::Test::HasFatalFailure()) break;
     test_count -= 1;
   }
   source_stride_ = tmp_stride;
@@ -825,7 +823,6 @@ TEST_P(SADavgTest, ShortSrc) {
     FillRandom(reference_data_, reference_stride_);
     FillRandom(second_pred_, width_);
     CheckSAD();
-    if (testing::Test::HasFatalFailure()) break;
     test_count -= 1;
   }
   source_stride_ = tmp_stride;
@@ -903,7 +900,6 @@ TEST_P(DistWtdSADTest, ShortSrc) {
     FillRandom(source_data_, source_stride_);
     FillRandom(reference_data_, reference_stride_);
     CheckSAD();
-    if (testing::Test::HasFatalFailure()) break;
     test_count -= 1;
   }
   source_stride_ = tmp_stride;
@@ -953,7 +949,6 @@ TEST_P(DistWtdSADavgTest, ShortSrc) {
     FillRandom(reference_data_, reference_stride_);
     FillRandom(second_pred_, width_);
     CheckSAD();
-    if (testing::Test::HasFatalFailure()) break;
     test_count -= 1;
   }
   source_stride_ = tmp_stride;

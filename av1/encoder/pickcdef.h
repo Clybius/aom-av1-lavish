@@ -30,12 +30,45 @@ typedef enum {
 /*!\cond */
 struct MultiThreadInfo;
 
+//Psy versions of reduced CDEF strength search space based on quantizer
+//Applies to full and L1 currently, used for quality and speed pruning
+
+//Full quality/quantizer based pruning for primary strength
+#define REDUCED_FULL_STRENGTHS_Q1 13
+#define REDUCED_FULL_STRENGTHS_Q2 10 //Shared with L1
+#define REDUCED_FULL_STRENGTHS_Q3 7  //Shared with L1
+#define REDUCED_FULL_STRENGTHS_Q4 4  //Shared with L1
+#define REDUCED_FULL_STRENGTHS_Q5 2  //Shared with L1
+
+//Quality/quantizer based pruning for secondary strength for both full and L1
+#define REDUCED_SEC_STRENGTHS_Q1 3
+#define REDUCED_SEC_STRENGTHS_Q2 2
+#define REDUCED_SEC_STRENGTHS_Q3 1
+
+//Normal versions
 #define REDUCED_PRI_STRENGTHS_LVL1 8
 #define REDUCED_PRI_STRENGTHS_LVL2 5
 #define REDUCED_SEC_STRENGTHS_LVL3 2
 #define REDUCED_SEC_STRENGTHS_LVL5 1
 #define REDUCED_PRI_STRENGTHS_LVL4 2
 
+//Psy ones
+#define REDUCED_TOTAL_FULL_STRENGTHS_Q1 \
+  (REDUCED_FULL_STRENGTHS_Q1 * CDEF_SEC_STRENGTHS)
+
+#define REDUCED_TOTAL_FULL_STRENGTHS_Q2 \
+  (REDUCED_FULL_STRENGTHS_Q2 * CDEF_SEC_STRENGTHS)
+
+#define REDUCED_TOTAL_FULL_STRENGTHS_Q3 \
+  (REDUCED_FULL_STRENGTHS_Q3 * REDUCED_SEC_STRENGTHS_Q1)
+
+#define REDUCED_TOTAL_FULL_STRENGTHS_Q4 \
+  (REDUCED_FULL_STRENGTHS_Q4 * REDUCED_SEC_STRENGTHS_Q2)
+
+#define REDUCED_TOTAL_FULL_STRENGTHS_Q5 \
+  (REDUCED_FULL_STRENGTHS_Q5 * REDUCED_SEC_STRENGTHS_Q3)
+
+//Normal ones
 #define REDUCED_TOTAL_STRENGTHS_LVL1 \
   (REDUCED_PRI_STRENGTHS_LVL1 * CDEF_SEC_STRENGTHS)
 #define REDUCED_TOTAL_STRENGTHS_LVL2 \
@@ -48,6 +81,21 @@ struct MultiThreadInfo;
   (REDUCED_PRI_STRENGTHS_LVL4 * REDUCED_SEC_STRENGTHS_LVL5)
 #define TOTAL_STRENGTHS (CDEF_PRI_STRENGTHS * CDEF_SEC_STRENGTHS)
 
+//Full psy
+static const int priconv_q1[REDUCED_FULL_STRENGTHS_Q1] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+//Full/L1 shared psy
+static const int priconv_q2[REDUCED_FULL_STRENGTHS_Q2] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+static const int priconv_q3[REDUCED_FULL_STRENGTHS_Q3] = { 0, 1, 2, 3, 4, 5, 6 };
+static const int priconv_q4[REDUCED_FULL_STRENGTHS_Q4] = { 0, 1, 2, 3 };
+static const int priconv_q5[REDUCED_FULL_STRENGTHS_Q5] = { 0, 1 };
+
+//Secondary psy
+static const int secconv_q1[REDUCED_SEC_STRENGTHS_Q1] = { 0, 1, 2 };
+static const int secconv_q2[REDUCED_SEC_STRENGTHS_Q2] = { 0, 1 };
+static const int secconv_q3[REDUCED_SEC_STRENGTHS_Q3] = { 0 };
+
+
+//Normal
 static const int priconv_lvl1[REDUCED_PRI_STRENGTHS_LVL1] = { 0, 1, 2,  3,
                                                               5, 7, 10, 13 };
 static const int priconv_lvl2[REDUCED_PRI_STRENGTHS_LVL2] = { 0, 2, 4, 8, 14 };
@@ -57,6 +105,11 @@ static const int secconv_lvl3[REDUCED_SEC_STRENGTHS_LVL3] = { 0, 2 };
 static const int secconv_lvl5[REDUCED_SEC_STRENGTHS_LVL5] = { 0 };
 static const int nb_cdef_strengths[CDEF_PICK_METHODS] = {
   TOTAL_STRENGTHS,
+  REDUCED_TOTAL_FULL_STRENGTHS_Q1,
+  REDUCED_TOTAL_FULL_STRENGTHS_Q2,
+  REDUCED_TOTAL_FULL_STRENGTHS_Q3,
+  REDUCED_TOTAL_FULL_STRENGTHS_Q4,
+  REDUCED_TOTAL_FULL_STRENGTHS_Q5,
   REDUCED_TOTAL_STRENGTHS_LVL1,
   REDUCED_TOTAL_STRENGTHS_LVL2,
   REDUCED_TOTAL_STRENGTHS_LVL3,

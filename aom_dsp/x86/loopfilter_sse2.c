@@ -2133,7 +2133,7 @@ void aom_lpf_horizontal_14_quad_sse2(unsigned char *s, int p,
                                      const unsigned char *_blimit0,
                                      const unsigned char *_limit0,
                                      const unsigned char *_thresh0) {
-  const __m128i zero = _mm_setzero_si128();
+  const __m128i zero = _mm_set1_epi16(0);
   const __m128i one = _mm_set1_epi8(1);
   const __m128i blimit_v = _mm_load_si128((const __m128i *)_blimit0);
   const __m128i limit_v = _mm_load_si128((const __m128i *)_limit0);
@@ -2438,7 +2438,7 @@ void aom_lpf_horizontal_8_quad_sse2(unsigned char *s, int p,
                                     const unsigned char *_blimit0,
                                     const unsigned char *_limit0,
                                     const unsigned char *_thresh0) {
-  const __m128i zero = _mm_setzero_si128();
+  const __m128i zero = _mm_set1_epi16(0);
   const __m128i one = _mm_set1_epi8(1);
   const __m128i blimit_v = _mm_load_si128((const __m128i *)_blimit0);
   const __m128i limit_v = _mm_load_si128((const __m128i *)_limit0);
@@ -2630,7 +2630,7 @@ void aom_lpf_horizontal_6_quad_sse2(unsigned char *s, int p,
                                     const unsigned char *_blimit0,
                                     const unsigned char *_limit0,
                                     const unsigned char *_thresh0) {
-  const __m128i zero = _mm_setzero_si128();
+  const __m128i zero = _mm_set1_epi16(0);
   const __m128i one = _mm_set1_epi8(1);
   const __m128i blimit_v = _mm_load_si128((const __m128i *)_blimit0);
   const __m128i limit_v = _mm_load_si128((const __m128i *)_limit0);
@@ -2802,7 +2802,7 @@ void aom_lpf_horizontal_4_quad_sse2(unsigned char *s, int p,
                                     const unsigned char *_blimit0,
                                     const unsigned char *_limit0,
                                     const unsigned char *_thresh0) {
-  const __m128i zero = _mm_setzero_si128();
+  const __m128i zero = _mm_set1_epi16(0);
   const __m128i blimit_v = _mm_load_si128((const __m128i *)_blimit0);
   const __m128i limit_v = _mm_load_si128((const __m128i *)_limit0);
   const __m128i thresh_v = _mm_load_si128((const __m128i *)_thresh0);

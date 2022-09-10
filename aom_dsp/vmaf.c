@@ -74,7 +74,7 @@ void aom_init_vmaf_context(VmafContext **vmaf_context, VmafModel *vmaf_model,
   // TODO(sdeng): make them CLI arguments.
   VmafConfiguration cfg;
   cfg.log_level = VMAF_LOG_LEVEL_NONE;
-  cfg.n_threads = 0;
+  cfg.n_threads = 2;
   cfg.n_subsample = 0;
   cfg.cpumask = 0;
 

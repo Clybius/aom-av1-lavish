@@ -250,7 +250,7 @@ void av1_apply_temporal_filter_avx2(
   }
   // Smaller strength -> smaller filtering weight.
   double s_decay = pow((double)filter_strength / TF_STRENGTH_THRESHOLD, 2);
-  s_decay = CLIP(s_decay, 1e-5, 1);
+  s_decay = CLIP(s_decay, 1e-5, 1.2);
   double d_factor[4] = { 0 };
   uint16_t frame_sse[SSE_STRIDE * BH] = { 0 };
   uint32_t luma_sse_sum[BW * BH] = { 0 };

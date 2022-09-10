@@ -28,8 +28,6 @@ extern "C" {
   100  // Use increased thresholds for midres for speed 9 when qindex is above
        // this threshold
 
-#define CALC_CHROMA_THRESH_FOR_ZEROMV_SKIP(thresh_exit_part) \
-  ((3 * (thresh_exit_part)) >> 2)
 /*!\brief Set the thresholds for variance based partition.
  *
  * Set the variance split thresholds for following the block sizes:

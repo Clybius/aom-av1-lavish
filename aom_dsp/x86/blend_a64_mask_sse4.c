@@ -1493,7 +1493,7 @@ void aom_highbd_blend_a64_d16_mask_sse4_1(
   const __m128i v_round_offset = _mm_set1_epi32(round_offset);
   const int shift = round_bits + AOM_BLEND_A64_ROUND_BITS;
 
-  const __m128i clip_low = _mm_setzero_si128();
+  const __m128i clip_low = _mm_set1_epi16(0);
   const __m128i clip_high = _mm_set1_epi16((1 << bd) - 1);
   const __m128i mask_max = _mm_set1_epi16(AOM_BLEND_A64_MAX_ALPHA);
 

@@ -636,6 +636,7 @@ void av1_update_film_grain_parameters_seq(struct AV1_PRIMARY *ppi,
 void av1_update_film_grain_parameters(struct AV1_COMP *cpi,
                                       const AV1EncoderConfig *oxcf) {
   AV1_COMMON *const cm = &cpi->common;
+  cpi->oxcf = *oxcf;
   const TuneCfg *const tune_cfg = &oxcf->tune_cfg;
 
   if (cpi->film_grain_table) {
@@ -775,6 +776,14 @@ BLOCK_SIZE av1_select_sb_size(const AV1EncoderConfig *const oxcf, int width,
   if (oxcf->tool_cfg.superblock_size == AOM_SUPERBLOCK_SIZE_128X128) {
     return BLOCK_128X128;
   }
+  //Sketchy code to check whether or not a video/image is small enough to only use 64x64 SBs without downsides
+  int is_4k_or_smaller = (width * height) < (2700 * 2160);
+
+  //Force 64x64 superblock size to improve psycho-visual quality in video content
+  //but keep it only on for higher quality levels
+  if (oxcf->tune_cfg.content == AOM_CONTENT_PSY && oxcf->rc_cfg.cq_level <= 30 && is_4k_or_smaller) {
+    return BLOCK_64X64;
+    }
 #if CONFIG_TFLITE
   if (oxcf->q_cfg.deltaq_mode == DELTA_Q_USER_RATING_BASED) return BLOCK_64X64;
 #endif
@@ -1050,13 +1059,13 @@ void av1_determine_sc_tools_with_encoding(AV1_COMP *cpi, const int q_orig) {
   // content tools, with a high q and fixed partition.
   for (int pass = 0; pass < 2; ++pass) {
     set_encoding_params_for_screen_content(cpi, pass);
-    av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel,
+    av1_set_quantizer(cpi, q_cfg->qm_minlevel, q_cfg->qm_maxlevel,
                       q_for_screen_content_quick_run,
                       q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq);
     av1_set_speed_features_qindex_dependent(cpi, oxcf->speed);
     if (q_cfg->deltaq_mode != NO_DELTA_Q || q_cfg->enable_chroma_deltaq)
       av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
-                         cm->seq_params->bit_depth);
+                         cm->seq_params->bit_depth, oxcf->algo_cfg.quant_sharpness);
 
     av1_set_variance_partition_thresholds(cpi, q_for_screen_content_quick_run,
                                           0);
@@ -1273,7 +1282,7 @@ void av1_set_mb_ssim_rdmult_scaling(AV1_COMP *cpi) {
   // Loop through each 16x16 block.
   for (int row = 0; row < num_rows; ++row) {
     for (int col = 0; col < num_cols; ++col) {
-      double var = 0.0, num_of_var = 0.0;
+      double var = 0.0, num_of_var = 0.0, var_log = 0.0;
       const int index = row * num_cols + col;
 
       // Loop through each 8x8 block.
@@ -1290,26 +1299,85 @@ void av1_set_mb_ssim_rdmult_scaling(AV1_COMP *cpi) {
           buf.buf = y_buffer + row_offset_y * y_stride + col_offset_y;
           buf.stride = y_stride;
 
-          var += av1_get_perpixel_variance_facade(cpi, xd, &buf, BLOCK_8X8,
+          double blk_var;
+          blk_var = av1_get_perpixel_variance_facade(cpi, xd, &buf, BLOCK_8X8,
                                                   AOM_PLANE_Y);
+          var_log += log(AOMMAX(blk_var, 1));
+          var += blk_var;
           num_of_var += 1.0;
         }
       }
-      var = var / num_of_var;
-
-      // Curve fitting with an exponential model on all 16x16 blocks from the
-      // midres dataset.
-      var = 67.035434 * (1 - exp(-0.0021489 * var)) + 17.492222;
+      if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY ||
+      cpi->oxcf.tune_cfg.tuning == AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY_VMAF_PSY_QP) {
+        var = exp(var_log / num_of_var);
+        const int cq_level = cpi->oxcf.rc_cfg.cq_level;
+        const double hq_level = 30 * 4;
+        const double delta =
+            cq_level < hq_level
+                ? 0.5 * (double)(hq_level - cq_level) / hq_level
+                : 10.0 * (double)(cq_level - hq_level) / (MAXQ - hq_level);
+        // Curve fitting with an exponential model on user rating dataset.
+        var = 39.126 * (1 - exp(-0.0009413 * var)) + 1.236 + delta;
+      } else {
+        var = var / num_of_var;
+        // Curve fitting with an exponential model on all 16x16 blocks from the
+        // midres dataset.
+        var = 67.035434 * (1 - exp(-0.0021489 * var)) + 17.492222;
+      }
       cpi->ssim_rdmult_scaling_factors[index] = var;
       log_sum += log(var);
     }
   }
-  log_sum = exp(log_sum / (double)(num_rows * num_cols));
+  if ((cpi->oxcf.tune_cfg.tuning == AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY &&
+      cpi->oxcf.q_cfg.deltaq_mode != NO_DELTA_Q) ||
+      (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY_VMAF_PSY_QP &&
+      cpi->oxcf.q_cfg.deltaq_mode != NO_DELTA_Q)) {
+    const int sb_size = cpi->common.seq_params->sb_size;
+    const int num_mi_w_sb = mi_size_wide[sb_size];
+    const int num_mi_h_sb = mi_size_high[sb_size];
+    const int num_cols_sb =
+        (mi_params->mi_cols + num_mi_w_sb - 1) / num_mi_w_sb;
+    const int num_rows_sb =
+        (mi_params->mi_rows + num_mi_h_sb - 1) / num_mi_h_sb;
+    const int num_blk_w = num_mi_w_sb / num_mi_w;
+    const int num_blk_h = num_mi_h_sb / num_mi_h;
+    assert(num_blk_w * num_mi_w == num_mi_w_sb);
+    assert(num_blk_h * num_mi_h == num_mi_h_sb);
 
-  for (int row = 0; row < num_rows; ++row) {
-    for (int col = 0; col < num_cols; ++col) {
-      const int index = row * num_cols + col;
-      cpi->ssim_rdmult_scaling_factors[index] /= log_sum;
+    for (int row = 0; row < num_rows_sb; ++row) {
+      for (int col = 0; col < num_cols_sb; ++col) {
+        double log_sum_sb = 0.0;
+        double blk_count = 0.0;
+        for (int blk_row = row * num_blk_h;
+             blk_row < (row + 1) * num_blk_h && blk_row < num_rows; ++blk_row) {
+          for (int blk_col = col * num_blk_w;
+               blk_col < (col + 1) * num_blk_w && blk_col < num_cols;
+               ++blk_col) {
+            const int index = blk_row * num_cols + blk_col;
+            log_sum_sb += log(cpi->ssim_rdmult_scaling_factors[index]);
+            blk_count += 1.0;
+          }
+        }
+        log_sum_sb = exp(log_sum_sb / blk_count);
+        for (int blk_row = row * num_blk_h;
+             blk_row < (row + 1) * num_blk_h && blk_row < num_rows; ++blk_row) {
+          for (int blk_col = col * num_blk_w;
+               blk_col < (col + 1) * num_blk_w && blk_col < num_cols;
+               ++blk_col) {
+            const int index = blk_row * num_cols + blk_col;
+            cpi->ssim_rdmult_scaling_factors[index] /= log_sum_sb;
+          }
+        }
+      }
+    }
+  } else {
+    log_sum = exp(log_sum / (double)(num_rows * num_cols));
+
+    for (int row = 0; row < num_rows; ++row) {
+      for (int col = 0; col < num_cols; ++col) {
+        const int index = row * num_cols + col;
+        cpi->ssim_rdmult_scaling_factors[index] /= log_sum;
+      }
     }
   }
 }

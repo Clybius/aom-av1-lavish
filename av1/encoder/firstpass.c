@@ -473,10 +473,8 @@ static int firstpass_intra_prediction(
 
   set_mi_offsets(mi_params, xd, unit_row * unit_scale, unit_col * unit_scale);
   xd->plane[0].dst.buf = this_frame->y_buffer + y_offset;
-  if (num_planes > 1) {
-    xd->plane[1].dst.buf = this_frame->u_buffer + uv_offset;
-    xd->plane[2].dst.buf = this_frame->v_buffer + uv_offset;
-  }
+  xd->plane[1].dst.buf = this_frame->u_buffer + uv_offset;
+  xd->plane[2].dst.buf = this_frame->v_buffer + uv_offset;
   xd->left_available = (unit_col != 0);
   xd->mi[0]->bsize = bsize;
   xd->mi[0]->ref_frame[0] = INTRA_FRAME;
@@ -763,10 +761,8 @@ static int firstpass_inter_prediction(
 
     // Reset to last frame as reference buffer.
     xd->plane[0].pre[0].buf = last_frame->y_buffer + recon_yoffset;
-    if (av1_num_planes(&cpi->common) > 1) {
-      xd->plane[1].pre[0].buf = last_frame->u_buffer + recon_uvoffset;
-      xd->plane[2].pre[0].buf = last_frame->v_buffer + recon_uvoffset;
-    }
+    xd->plane[1].pre[0].buf = last_frame->u_buffer + recon_uvoffset;
+    xd->plane[2].pre[0].buf = last_frame->v_buffer + recon_uvoffset;
   } else {
     stats->sr_coded_error += motion_error;
   }
@@ -1200,10 +1196,8 @@ void av1_first_pass_row(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
 
     // Adjust to the next column of MBs.
     x->plane[0].src.buf += fp_block_size_width;
-    if (num_planes > 1) {
-      x->plane[1].src.buf += uv_mb_height;
-      x->plane[2].src.buf += uv_mb_height;
-    }
+    x->plane[1].src.buf += uv_mb_height;
+    x->plane[2].src.buf += uv_mb_height;
 
     recon_yoffset += fp_block_size_width;
     src_yoffset += fp_block_size_width;
@@ -1298,7 +1292,7 @@ void av1_first_pass(AV1_COMP *cpi, const int64_t ts_duration) {
   cpi->rc.frames_to_key = INT_MAX;
 
   av1_set_quantizer(
-      cm, cpi->oxcf.q_cfg.qm_minlevel, cpi->oxcf.q_cfg.qm_maxlevel, qindex,
+      cpi, cpi->oxcf.q_cfg.qm_minlevel, cpi->oxcf.q_cfg.qm_maxlevel, qindex,
       cpi->oxcf.q_cfg.enable_chroma_deltaq, cpi->oxcf.q_cfg.enable_hdr_deltaq);
 
   av1_setup_block_planes(xd, seq_params->subsampling_x,

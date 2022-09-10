@@ -352,6 +352,7 @@ typedef struct AV1LrStruct {
   FilterFrameCtxt ctxt[MAX_MB_PLANE];
   YV12_BUFFER_CONFIG *frame;
   YV12_BUFFER_CONFIG *dst;
+  struct AV1Common *cm;
 } AV1LrStruct;
 
 extern const sgr_params_type av1_sgr_params[SGRPROJ_PARAMS];
@@ -463,7 +464,8 @@ void av1_loop_restoration_save_boundary_lines(const YV12_BUFFER_CONFIG *frame,
 void av1_loop_restoration_filter_frame_init(AV1LrStruct *lr_ctxt,
                                             YV12_BUFFER_CONFIG *frame,
                                             struct AV1Common *cm,
-                                            int optimized_lr, int num_planes);
+                                            int optimized_lr, int num_planes,
+                                            int do_extend_border_mt);
 void av1_loop_restoration_copy_planes(AV1LrStruct *loop_rest_ctxt,
                                       struct AV1Common *cm, int num_planes);
 void av1_foreach_rest_unit_in_row(

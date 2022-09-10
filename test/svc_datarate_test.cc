@@ -122,9 +122,9 @@ class DatarateTestSVC
     if (number_spatial_layers_ == 2) {
       spatial_layer_id = (layer_frame_cnt_ % 2 == 0) ? 0 : 1;
     } else if (number_spatial_layers_ == 3) {
-      spatial_layer_id = (layer_frame_cnt_ % 3 == 0)         ? 0
-                         : ((layer_frame_cnt_ - 1) % 3 == 0) ? 1
-                                                             : 2;
+      spatial_layer_id = (layer_frame_cnt_ % 3 == 0)
+                             ? 0
+                             : ((layer_frame_cnt_ - 1) % 3 == 0) ? 1 : 2;
     }
     // Set the reference/update flags, layer_id, and reference_map
     // buffer index.

@@ -70,7 +70,6 @@ typedef struct LoopRestorationWorkerData {
   int32_t *rst_tmpbuf;
   void *rlbs;
   void *lr_ctxt;
-  int do_extend_border;
 } LRWorkerData;
 
 // Looprestoration row synchronization
@@ -107,7 +106,6 @@ typedef struct AV1CdefWorker {
   uint16_t *srcbuf;
   uint16_t *linebuf[MAX_MB_PLANE];
   cdef_init_fb_row_t cdef_init_fb_row_fn;
-  int do_extend_border;
 } AV1CdefWorkerData;
 
 typedef struct AV1CdefRowSync {

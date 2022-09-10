@@ -32,10 +32,6 @@
 #include "av1/encoder/picklpf.h"
 #include "av1/encoder/pickrst.h"
 
-// When set to RESTORE_WIENER or RESTORE_SGRPROJ only those are allowed.
-// When set to RESTORE_TYPES we allow switchable.
-static const RestorationType force_restore_type = RESTORE_TYPES;
-
 // Number of Wiener iterations
 #define NUM_WIENER_ITERS 5
 
@@ -101,6 +97,17 @@ static uint64_t var_restoration_unit(const RestorationTileLimits *limits,
   return var_part_extractors[3 * highbd + plane](
       src, limits->h_start, limits->h_end - limits->h_start, limits->v_start,
       limits->v_end - limits->v_start);
+}
+
+// When set to RESTORE_WIENER or RESTORE_SGRPROJ only those are allowed.
+// When set to RESTORE_TYPES we allow switchable.
+static inline RestorationType get_forced_restore_types(AV1EncoderConfig *oxcf) {
+  const TuneCfg *tune_params = &oxcf->tune_cfg;
+  if (tune_params->content == AOM_CONTENT_PSY) {
+    return RESTORE_SGRPROJ;
+  } else {
+    return RESTORE_TYPES;
+  }
 }
 
 typedef struct {
@@ -1783,6 +1790,8 @@ void av1_pick_filter_restoration(const YV12_BUFFER_CONFIG *src, AV1_COMP *cpi) {
   RestSearchCtxt rsc;
   const int plane_start = AOM_PLANE_Y;
   const int plane_end = num_planes > 1 ? AOM_PLANE_V : AOM_PLANE_Y;
+  const RestorationType force_restore_type =
+      get_forced_restore_types(&cpi->oxcf);
   for (int plane = plane_start; plane <= plane_end; ++plane) {
     init_rsc(src, &cpi->common, x, &cpi->sf.lpf_sf, plane, rusi,
              &cpi->trial_frame_rst, &rsc);

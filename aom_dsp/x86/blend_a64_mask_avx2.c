@@ -1307,7 +1307,7 @@ void aom_highbd_blend_a64_d16_mask_avx2(
   const __m256i v_round_offset = _mm256_set1_epi32(round_offset);
   const int shift = round_bits + AOM_BLEND_A64_ROUND_BITS;
 
-  const __m256i clip_low = _mm256_setzero_si256();
+  const __m256i clip_low = _mm256_set1_epi16(0);
   const __m256i clip_high = _mm256_set1_epi16((1 << bd) - 1);
   const __m256i mask_max = _mm256_set1_epi16(AOM_BLEND_A64_MAX_ALPHA);
 

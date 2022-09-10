@@ -799,10 +799,11 @@ static int64_t calculate_total_gf_group_bits(AV1_COMP *cpi,
   }
 
   // Clamp odd edge cases.
-  total_group_bits = (total_group_bits < 0) ? 0
-                     : (total_group_bits > twopass->kf_group_bits)
-                         ? twopass->kf_group_bits
-                         : total_group_bits;
+  total_group_bits = (total_group_bits < 0)
+                         ? 0
+                         : (total_group_bits > twopass->kf_group_bits)
+                               ? twopass->kf_group_bits
+                               : total_group_bits;
 
   // Clip based on user supplied data rate variability limit.
   if (total_group_bits > (int64_t)max_bits * p_rc->baseline_gf_interval)
@@ -4103,8 +4104,9 @@ void av1_twopass_postencode_update(AV1_COMP *cpi) {
       p_rc->active_best_quality[i] = cpi->common.quant_params.base_qindex;
 #if CONFIG_TUNE_VMAF
       if (cpi->vmaf_info.original_qindex != -1 &&
-          (cpi->oxcf.tune_cfg.tuning >= AOM_TUNE_VMAF_WITH_PREPROCESSING &&
-           cpi->oxcf.tune_cfg.tuning <= AOM_TUNE_VMAF_NEG_MAX_GAIN)) {
+          ((cpi->oxcf.tune_cfg.tuning >= AOM_TUNE_VMAF_WITH_PREPROCESSING &&
+           cpi->oxcf.tune_cfg.tuning <= AOM_TUNE_VMAF_NEG_MAX_GAIN) ||
+           cpi->oxcf.tune_cfg.tuning >= AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY_VMAF_PSY_QP)) {
         p_rc->active_best_quality[i] = cpi->vmaf_info.original_qindex;
       }
 #endif

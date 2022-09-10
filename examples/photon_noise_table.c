@@ -96,6 +96,10 @@ static arg_def_t height_arg =
     ARG_DEF("l", "height", 1, "Height of the image in pixels (required)");
 static arg_def_t iso_arg = ARG_DEF(
     "i", "iso", 1, "ISO setting indicative of the light level (required)");
+static arg_def_t cb_blend_arg = ARG_DEF(
+    "b", "cb-blend", 1, "Blue Chroma blending %% setting (default = 0)");
+static arg_def_t cr_blend_arg =
+    ARG_DEF("r", "cr-blend", 1, "Red Chroma blending %% setting (default = 0)");
 static arg_def_t output_arg =
     ARG_DEF("o", "output", 1,
             "Output file to which to write the film grain table (required)");
@@ -129,6 +133,8 @@ typedef struct {
   int width;
   int height;
   int iso_setting;
+  int blue_chroma_blend_setting;
+  int red_chroma_blend_setting;
 
   const transfer_function_t *transfer_function;
 
@@ -137,15 +143,18 @@ typedef struct {
 
 static void parse_args(int argc, char **argv,
                        photon_noise_args_t *photon_noise_args) {
-  static const arg_def_t *args[] = { &help_arg,   &width_arg,
-                                     &height_arg, &iso_arg,
-                                     &output_arg, &transfer_function_arg,
+  static const arg_def_t *args[] = { &help_arg,     &width_arg,
+                                     &height_arg,   &iso_arg,
+                                     &cb_blend_arg, &cr_blend_arg,
+                                     &output_arg,   &transfer_function_arg,
                                      NULL };
   struct arg arg;
   int width_set = 0, height_set = 0, iso_set = 0, output_set = 0, i;
 
   photon_noise_args->transfer_function =
       find_transfer_function(AOM_CICP_TC_SRGB);
+  photon_noise_args->blue_chroma_blend_setting = 0;
+  photon_noise_args->red_chroma_blend_setting = 0;
 
   for (i = 1; i < argc; i += arg.argv_step) {
     arg.argv_step = 1;
@@ -161,6 +170,10 @@ static void parse_args(int argc, char **argv,
     } else if (arg_match(&arg, &iso_arg, argv + i)) {
       photon_noise_args->iso_setting = arg_parse_int(&arg);
       iso_set = 1;
+    } else if (arg_match(&arg, &cb_blend_arg, argv + i)) {
+      photon_noise_args->blue_chroma_blend_setting = arg_parse_int(&arg);
+    } else if (arg_match(&arg, &cr_blend_arg, argv + i)) {
+      photon_noise_args->red_chroma_blend_setting = arg_parse_int(&arg);
     } else if (arg_match(&arg, &output_arg, argv + i)) {
       photon_noise_args->output_filename = arg.val;
       output_set = 1;
@@ -345,21 +358,61 @@ static void generate_photon_noise(const photon_noise_args_t *photon_noise_args,
     film_grain->scaling_points_y[i][1] = (int)encoded_noise;
   }
 
+  film_grain->num_cb_points = 10;
+  film_grain->num_cr_points = 10;
+  for (i = 0; i < film_grain->num_cb_points; ++i) {
+    float x = i / (film_grain->num_cb_points - 1.f);
+    const float linear = photon_noise_args->transfer_function->to_linear(x);
+    const float electrons_per_pixel = max_electrons_per_pixel * linear;
+    // Quadrature sum of the relevant sources of noise, in electrons rms. Photon
+    // shot noise is sqrt(electrons) so we can skip the square root and the
+    // squaring.
+    // https://en.wikipedia.org/wiki/Addition_in_quadrature
+    // https://doi.org/10.1117/3.725073
+    const float noise_in_electrons =
+        sqrtf(kInputReferredReadNoise * kInputReferredReadNoise +
+              electrons_per_pixel +
+              (kPhotoResponseNonUniformity * kPhotoResponseNonUniformity *
+               electrons_per_pixel * electrons_per_pixel));
+    const float linear_noise = noise_in_electrons / max_electrons_per_pixel;
+    const float linear_range_start = maxf(0.f, linear - 2 * linear_noise);
+    const float linear_range_end = minf(1.f, linear + 2 * linear_noise);
+    const float tf_slope =
+        (photon_noise_args->transfer_function->from_linear(linear_range_end) -
+         photon_noise_args->transfer_function->from_linear(
+             linear_range_start)) /
+        (linear_range_end - linear_range_start);
+    float encoded_noise_cb =
+        linear_noise * tf_slope *
+        (photon_noise_args->blue_chroma_blend_setting / 100.f);
+    float encoded_noise_cr =
+        linear_noise * tf_slope *
+        (photon_noise_args->red_chroma_blend_setting / 100.f);
+
+    x = roundf(255 * x);
+    encoded_noise_cb = minf(255.f, roundf(255 * 7.88f * encoded_noise_cb));
+    encoded_noise_cr = minf(255.f, roundf(255 * 7.88f * encoded_noise_cr));
+
+    film_grain->scaling_points_cb[i][0] = (int)x;
+    film_grain->scaling_points_cb[i][1] = (int)encoded_noise_cb;
+    film_grain->scaling_points_cr[i][0] = (int)x;
+    film_grain->scaling_points_cr[i][1] = (int)encoded_noise_cr;
+  }
+
   film_grain->apply_grain = 1;
   film_grain->update_parameters = 1;
-  film_grain->num_cb_points = 0;
-  film_grain->num_cr_points = 0;
   film_grain->scaling_shift = 8;
   film_grain->ar_coeff_lag = 0;
   film_grain->ar_coeffs_cb[0] = 0;
   film_grain->ar_coeffs_cr[0] = 0;
   film_grain->ar_coeff_shift = 6;
-  film_grain->cb_mult = 0;
-  film_grain->cb_luma_mult = 0;
-  film_grain->cb_offset = 0;
-  film_grain->cr_mult = 0;
-  film_grain->cr_luma_mult = 0;
-  film_grain->cr_offset = 0;
+  film_grain->cb_mult = 128;
+  film_grain->cb_luma_mult = 192;
+  film_grain->cb_offset = 256;
+  film_grain->cr_mult = 128;
+  film_grain->cr_luma_mult = 192;
+  film_grain->cr_offset = 256;
+  film_grain->grain_scale_shift = 0;
   film_grain->overlap_flag = 1;
   film_grain->random_seed = 7391;
   film_grain->chroma_scaling_from_luma = 0;

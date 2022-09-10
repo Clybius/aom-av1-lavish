@@ -49,22 +49,18 @@ static AOM_INLINE void suppress_active_map(AV1_COMP *cpi) {
         seg_map[i] = AM_SEGMENT_ID_ACTIVE;
 }
 
-// Returns 'size' in the number of Mode Info (MI) units. 'size' is either the
-// width or height.
-static AOM_INLINE int size_in_mi(int size) {
+static AOM_INLINE void set_mb_mi(CommonModeInfoParams *mi_params, int width,
+                                 int height) {
   // Ensure that the decoded width and height are both multiples of
   // 8 luma pixels (note: this may only be a multiple of 4 chroma pixels if
   // subsampling is used).
   // This simplifies the implementation of various experiments,
   // eg. cdef, which operates on units of 8x8 luma pixels.
-  const int aligned_size = ALIGN_POWER_OF_TWO(size, 3);
-  return aligned_size >> MI_SIZE_LOG2;
-}
+  const int aligned_width = ALIGN_POWER_OF_TWO(width, 3);
+  const int aligned_height = ALIGN_POWER_OF_TWO(height, 3);
 
-static AOM_INLINE void set_mb_mi(CommonModeInfoParams *mi_params, int width,
-                                 int height) {
-  mi_params->mi_cols = size_in_mi(width);
-  mi_params->mi_rows = size_in_mi(height);
+  mi_params->mi_cols = aligned_width >> MI_SIZE_LOG2;
+  mi_params->mi_rows = aligned_height >> MI_SIZE_LOG2;
   mi_params->mi_stride = calc_mi_size(mi_params->mi_cols);
 
   mi_params->mb_cols = (mi_params->mi_cols + 2) >> 2;

@@ -242,10 +242,11 @@ static AOM_FORCE_INLINE void update_coeff_eob(
 static INLINE void update_skip(int *accu_rate, int64_t accu_dist, int *eob,
                                int nz_num, int *nz_ci, int64_t rdmult,
                                int skip_cost, int non_skip_cost,
-                               tran_low_t *qcoeff, tran_low_t *dqcoeff) {
+                               tran_low_t *qcoeff, tran_low_t *dqcoeff,
+                               int sharpness) {
   const int64_t rd = RDCOST(rdmult, *accu_rate + non_skip_cost, accu_dist);
   const int64_t rd_new_eob = RDCOST(rdmult, skip_cost, 0);
-  if (rd_new_eob < rd) {
+  if (rd_new_eob < rd && sharpness == 0) {
     for (int i = 0; i < nz_num; ++i) {
       const int ci = nz_ci[i];
       qcoeff[ci] = 0;
@@ -335,7 +336,7 @@ int av1_optimize_txb(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
   const LV_MAP_EOB_COST *txb_eob_costs =
       &coeff_costs->eob_costs[eob_multi_size][plane_type];
 
-  const int rshift = 2;
+  const int rshift = sharpness + 2;
 
   const int64_t rdmult =
       (((int64_t)x->rdmult *
@@ -401,9 +402,9 @@ int av1_optimize_txb(const struct AV1_COMP *cpi, MACROBLOCK *x, int plane,
     default: assert(false);
   }
 
-  if (si == -1 && nz_num <= max_nz_num && sharpness == 0) {
+  if (si == -1 && nz_num <= max_nz_num) {
     update_skip(&accu_rate, accu_dist, &eob, nz_num, nz_ci, rdmult, skip_cost,
-                non_skip_cost, qcoeff, dqcoeff);
+                non_skip_cost, qcoeff, dqcoeff, sharpness);
   }
 
 #define UPDATE_COEFF_SIMPLE_CASE(tx_class_literal)                             \

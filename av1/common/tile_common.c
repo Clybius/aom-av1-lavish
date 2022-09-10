@@ -9,6 +9,8 @@
  * PATENTS file, you can obtain it at www.aomedia.org/license/patent.
  */
 
+#include <stdbool.h>
+
 #include "av1/common/av1_common_int.h"
 #include "av1/common/resize.h"
 #include "av1/common/tile_common.h"
@@ -37,7 +39,26 @@ void av1_get_tile_limits(AV1_COMMON *const cm) {
 
   const int sb_size_log2 = seq_params->mib_size_log2 + MI_SIZE_LOG2;
   tiles->max_width_sb = MAX_TILE_WIDTH >> sb_size_log2;
-  const int max_tile_area_sb = MAX_TILE_AREA >> (2 * sb_size_log2);
+
+  bool use_level_7_above = false;
+  for (int i = 0; i < seq_params->operating_points_cnt_minus_1 + 1; i++) {
+    if ((seq_params->seq_level_idx[i] >= SEQ_LEVEL_7_0 &&
+         seq_params->seq_level_idx[i] <= SEQ_LEVEL_8_3) ||
+        seq_params->seq_level_idx[i] == SEQ_LEVEL_MAX) {
+      // Currently it is assumed that levels >= 7.0 are either used for all
+      // operating points, or none of them.
+      if (i != 0 && !use_level_7_above) {
+        aom_internal_error(
+            cm->error, AOM_CODEC_UNSUP_BITSTREAM,
+            "The levels of the operating points should be either all smaller "
+            "than 7.0 or all larger than or equal to 7.0");
+      }
+      use_level_7_above = true;
+    }
+  }
+  const int max_tile_area_sb =
+      (use_level_7_above ? MAX_TILE_AREA_LEVEL_7_AND_ABOVE : MAX_TILE_AREA) >>
+      (2 * sb_size_log2);
 
   tiles->min_log2_cols = tile_log2(tiles->max_width_sb, sb_cols);
   tiles->max_log2_cols = tile_log2(1, AOMMIN(sb_cols, MAX_TILE_COLS));

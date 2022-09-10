@@ -15,7 +15,7 @@
 #include "aom/aom_integer.h"
 #include "aom_dsp/arm/sum_neon.h"
 
-#if defined(__ARM_FEATURE_DOTPROD)
+#if defined(__ARM_FEATURE_DOTPROD) && (__ARM_FEATURE_DOTPROD == 1)
 
 static INLINE unsigned int sadwxh_neon(const uint8_t *src_ptr, int src_stride,
                                        const uint8_t *ref_ptr, int ref_stride,
@@ -99,7 +99,7 @@ static INLINE unsigned int sad16xh_neon(const uint8_t *src_ptr, int src_stride,
   return horizontal_add_u32x4(vaddq_u32(sum[0], sum[1]));
 }
 
-#else  // !defined(__ARM_FEATURE_DOTPROD)
+#else
 
 static INLINE unsigned int sad128xh_neon(const uint8_t *src_ptr, int src_stride,
                                          const uint8_t *ref_ptr, int ref_stride,
@@ -267,7 +267,7 @@ static INLINE unsigned int sad16xh_neon(const uint8_t *src_ptr, int src_stride,
   return horizontal_add_u16x8(sum);
 }
 
-#endif  // defined(__ARM_FEATURE_DOTPROD)
+#endif
 
 static INLINE unsigned int sad8xh_neon(const uint8_t *src_ptr, int src_stride,
                                        const uint8_t *ref_ptr, int ref_stride,

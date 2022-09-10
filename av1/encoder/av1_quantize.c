@@ -602,15 +602,21 @@ static int get_qzbin_factor(int q, aom_bit_depth_t bit_depth) {
 void av1_build_quantizer(aom_bit_depth_t bit_depth, int y_dc_delta_q,
                          int u_dc_delta_q, int u_ac_delta_q, int v_dc_delta_q,
                          int v_ac_delta_q, QUANTS *const quants,
-                         Dequants *const deq) {
+                         Dequants *const deq, int quant_sharpness) {
   int i, q, quant_QTX;
 
   for (q = 0; q < QINDEX_RANGE; q++) {
-    const int qzbin_factor = get_qzbin_factor(q, bit_depth);
-    const int qrounding_factor = q == 0 ? 64 : 48;
-
+    int qzbin_factor = get_qzbin_factor(q, bit_depth);
+    int qrounding_factor = q == 0 ? 64 : 48;
+    const int sharpness_adjustment = 16 * (7 - quant_sharpness) / 7;
+    if (quant_sharpness > 0 && q > 0) {
+      qzbin_factor = 64 + sharpness_adjustment;
+      qrounding_factor = 64 - sharpness_adjustment;
+    }
     for (i = 0; i < 2; ++i) {
-      const int qrounding_factor_fp = 64;
+      int qrounding_factor_fp = 64;
+      if (quant_sharpness > 0)
+        qrounding_factor_fp = 64 - sharpness_adjustment;
       // y quantizer with TX scale
       quant_QTX = i == 0 ? av1_dc_quant_QTX(q, y_dc_delta_q, bit_depth)
                          : av1_ac_quant_QTX(q, 0, bit_depth);
@@ -675,13 +681,13 @@ void av1_build_quantizer(aom_bit_depth_t bit_depth, int y_dc_delta_q,
 
 void av1_init_quantizer(EncQuantDequantParams *const enc_quant_dequant_params,
                         const CommonQuantParams *quant_params,
-                        aom_bit_depth_t bit_depth) {
+                        aom_bit_depth_t bit_depth, int quant_sharpness) {
   QUANTS *const quants = &enc_quant_dequant_params->quants;
   Dequants *const dequants = &enc_quant_dequant_params->dequants;
   av1_build_quantizer(bit_depth, quant_params->y_dc_delta_q,
                       quant_params->u_dc_delta_q, quant_params->u_ac_delta_q,
                       quant_params->v_dc_delta_q, quant_params->v_ac_delta_q,
-                      quants, dequants);
+                      quants, dequants, quant_sharpness);
 }
 
 void av1_set_q_index(const EncQuantDequantParams *enc_quant_dequant_params,
@@ -785,7 +791,8 @@ static int adjust_hdr_cb_deltaq(int base_qindex) {
   const double dcbQP = CHROMA_CB_QP_SCALE * chromaQp * QP_SCALE_FACTOR;
   int dqpCb = (int)(dcbQP + (dcbQP < 0 ? -0.5 : 0.5));
   dqpCb = AOMMIN(0, dqpCb);
-  dqpCb = (int)CLIP(dqpCb, -12 * QP_SCALE_FACTOR, 12 * QP_SCALE_FACTOR);
+  // dqpCb = (int)CLIP(dqpCb, -12 * QP_SCALE_FACTOR, 12 * QP_SCALE_FACTOR);
+  dqpCb = (int)CLIP(dqpCb, -CHROMA_DQP_MAX, CHROMA_DQP_MAX);
   return dqpCb;
 }
 
@@ -795,30 +802,19 @@ static int adjust_hdr_cr_deltaq(int base_qindex) {
   const double dcrQP = CHROMA_CR_QP_SCALE * chromaQp * QP_SCALE_FACTOR;
   int dqpCr = (int)(dcrQP + (dcrQP < 0 ? -0.5 : 0.5));
   dqpCr = AOMMIN(0, dqpCr);
-  dqpCr = (int)CLIP(dqpCr, -12 * QP_SCALE_FACTOR, 12 * QP_SCALE_FACTOR);
+  //dqpCr = (int)CLIP(dqpCr, -12 * QP_SCALE_FACTOR, 12 * QP_SCALE_FACTOR);
+  dqpCr = (int)CLIP(dqpCr, -CHROMA_DQP_MAX, CHROMA_DQP_MAX);
   return dqpCr;
 }
 
-void av1_set_quantizer(AV1_COMMON *const cm, int min_qmlevel, int max_qmlevel,
+void av1_set_quantizer(AV1_COMP *const cpi, int min_qmlevel, int max_qmlevel,
                        int q, int enable_chroma_deltaq, int enable_hdr_deltaq) {
   // quantizer has to be reinitialized with av1_init_quantizer() if any
   // delta_q changes.
+  AV1_COMMON *const cm = &cpi->common;
   CommonQuantParams *quant_params = &cm->quant_params;
   quant_params->base_qindex = AOMMAX(cm->delta_q_info.delta_q_present_flag, q);
   quant_params->y_dc_delta_q = 0;
-
-  if (enable_chroma_deltaq) {
-    // TODO(aomedia:2717): need to design better delta
-    quant_params->u_dc_delta_q = 2;
-    quant_params->u_ac_delta_q = 2;
-    quant_params->v_dc_delta_q = 2;
-    quant_params->v_ac_delta_q = 2;
-  } else {
-    quant_params->u_dc_delta_q = 0;
-    quant_params->u_ac_delta_q = 0;
-    quant_params->v_dc_delta_q = 0;
-    quant_params->v_ac_delta_q = 0;
-  }
 
   // following section 8.3.2 in T-REC-H.Sup15 document
   // to apply to AV1 qindex in the range of [0, 255]
@@ -831,6 +827,32 @@ void av1_set_quantizer(AV1_COMMON *const cm, int min_qmlevel, int max_qmlevel,
       cm->seq_params->separate_uv_delta_q = 1;
     }
   }
+
+  // TODO(aomedia:2717): need to design better delta
+  int adjustment = 0;
+  if (enable_chroma_deltaq) {
+    if ((cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY) ||
+        (cpi->oxcf.tune_cfg.content == AOM_CONTENT_ANIMATION)) {
+      // This will use -2 for 4:2:0, -1 for 4:2:2, and 0 for 4:4:4
+      int subsampling = cpi->source->subsampling_x + cpi->source->subsampling_y;
+      //Only do it for 4:2:0 and 4:2:2, as 4:4:4 does benefit from a positive offset
+      if (subsampling == 2){
+      adjustment = -subsampling + 1;
+      }
+        else if(subsampling == 1){
+        adjustment = -subsampling;
+        }
+    } else {
+      adjustment = 3;
+    }
+  }
+  if (cpi->oxcf.chroma_q_offset > 0 || cpi->oxcf.chroma_q_offset < 0) {
+    adjustment = cpi->oxcf.chroma_q_offset;
+  }
+  quant_params->u_dc_delta_q = adjustment;
+  quant_params->u_ac_delta_q = adjustment;
+  quant_params->v_dc_delta_q = adjustment;
+  quant_params->v_ac_delta_q = adjustment;
 
   quant_params->qmatrix_level_y =
       aom_get_qmlevel(quant_params->base_qindex, min_qmlevel, max_qmlevel);

@@ -705,9 +705,8 @@ static int construct_multi_layer_gf_structure(
       }
     } else {
       // Set layer depth threshold for reordering as per the gf length.
-      int depth_thr = (actual_gf_length == 16)   ? 3
-                      : (actual_gf_length == 32) ? 4
-                                                 : INT_MAX;
+      int depth_thr =
+          (actual_gf_length == 16) ? 3 : (actual_gf_length == 32) ? 4 : INT_MAX;
 
       set_multi_layer_params_for_fp(
           twopass, &cpi->twopass_frame, gf_group, p_rc, rc, frame_info,

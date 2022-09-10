@@ -41,6 +41,27 @@ static INLINE void get_cdef_filter_strengths(CDEF_PICK_METHOD pick_method,
   if (pick_method == CDEF_FULL_SEARCH) return;
 
   switch (pick_method) {
+
+//Psy versions of reduced CDEF strength search space based on quantizer
+//Applies to full and L1 currently, used for quality and speed pruning
+
+    case CDEF_FULL_SEARCH_Q1: *pri_strength = priconv_q1[pri_idx]; break;
+    case CDEF_FULL_SEARCH_Q2: *pri_strength = priconv_q2[pri_idx]; break;
+    case CDEF_FULL_SEARCH_Q3:
+     *pri_strength = priconv_q3[pri_idx];
+     *sec_strength = secconv_q1[sec_idx];
+      break;
+
+    case CDEF_FULL_SEARCH_Q4:
+     *pri_strength = priconv_q4[pri_idx];
+     *sec_strength = secconv_q2[sec_idx];
+      break;
+
+    case CDEF_FULL_SEARCH_Q5:
+     *pri_strength = priconv_q5[pri_idx];
+     *sec_strength = secconv_q3[sec_idx];
+      break;
+
     case CDEF_FAST_SEARCH_LVL1: *pri_strength = priconv_lvl1[pri_idx]; break;
     case CDEF_FAST_SEARCH_LVL2: *pri_strength = priconv_lvl2[pri_idx]; break;
     case CDEF_FAST_SEARCH_LVL3:

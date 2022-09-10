@@ -1017,16 +1017,9 @@ typedef struct macroblock {
    */
   int cnt_zeromv;
 
-  /*!\brief Flag to force zeromv-skip at superblock level, for nonrd path.
-   *
-   * 0/1 imply zeromv-skip is disabled/enabled. 2 implies that the blocks
-   * in the superblock may be marked as zeromv-skip at block level.
+  /*!\brief Flag to force zeromv-skip block, for nonrd path.
    */
-  int force_zeromv_skip_for_sb;
-
-  /*!\brief Flag to force zeromv-skip at block level, for nonrd path.
-   */
-  int force_zeromv_skip_for_blk;
+  int force_zeromv_skip;
 
   /*! \brief Previous segment id for which qmatrices were updated.
    * This is used to bypass setting of qmatrices if no change in qindex.

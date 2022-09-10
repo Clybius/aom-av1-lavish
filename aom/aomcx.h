@@ -492,7 +492,10 @@ enum aome_enc_control_id {
    *
    *  - AOM_CONTENT_DEFAULT = Regular video content (default)
    *  - AOM_CONTENT_SCREEN  = Screen capture content
+   *  - AOM_CONTENT_DEFAULT_NO_SCREEN = Regular video content without screen content tools
    *  - AOM_CONTENT_FILM = Film content
+   *  - AOM_CONTENT_PSY = Psychovisual optimizations for video
+   *  - AOM_CONTENT_ANIMATION = Psychovisual optimizations for complex animation
    */
   AV1E_SET_TUNE_CONTENT = 43,
 
@@ -616,10 +619,11 @@ enum aome_enc_control_id {
    * point (OP), int parameter
    * Possible values are in the form of "ABxy".
    *  - AB: OP index.
-   *  - xy: Target level index for the OP. Can be values 0~23 (corresponding to
-   *    level 2.0 ~ 7.3, note levels 2.2, 2.3, 3.2, 3.3, 4.2, 4.3, 7.0, 7.1, 7.2
-   *    & 7.3 are undefined) or 24 (keep level stats only for level monitoring)
-   *    or 31 (maximum level parameter, no level-based constraints).
+   *  - xy: Target level index for the OP. Can be values 0~27 (corresponding to
+   *    level 2.0 ~ 8.3, note levels 2.2, 2.3, 3.2, 3.3, 4.2 & 4.3 are
+   *    undefined, and that levels 7.x and 8.x are in draft status), 31
+   *    (maximum level parameter, no level-based constraints) or 32 (keep
+   *    level stats only for level monitoring).
    *
    * E.g.:
    * - "0" means target level index 0 (2.0) for the 0th OP;
@@ -1450,6 +1454,32 @@ enum aome_enc_control_id {
    */
   AV1E_GET_TARGET_SEQ_LEVEL_IDX = 155,
 
+  // ClybPatch -- TODO: Ideally, this should be reworked to be able to be successfully patched without needing to be touched every time there's a new param by other developers.
+  AOME_SET_DQ_MODULATE = AV1E_GET_TARGET_SEQ_LEVEL_IDX + 2,
+  /*!\ClybPatch -- brief Codec control function to set the quantization sharpness parameter,
+   * unsigned int parameter.
+   *
+   * Valid range: 0..7. The default is 0. Values 1-7 will change quantization in favour of block sharpness.
+   */
+  AOME_SET_QUANT_SHARPNESS = AV1E_GET_TARGET_SEQ_LEVEL_IDX + 3,
+  // ClybPatch -- Idea thanks to Opmox, sets the TPL model's strength / effectiveness.
+  AOME_SET_TPL_STRENGTH = AV1E_GET_TARGET_SEQ_LEVEL_IDX + 4,
+
+  AOME_SET_TPL_STRENGTH_POS = AOME_SET_TPL_STRENGTH + 1,
+
+  AOME_SET_TPL_STRENGTH_NEG = AOME_SET_TPL_STRENGTH + 2,
+
+  // ClybPatch -- qindex multiplier for vmaf's motion calculations
+  AOME_SET_VMAF_MOTION_MULT = AOME_SET_TPL_STRENGTH + 3,
+
+  // ClybPatch -- qindex multiplier for vmaf's motion calculations
+  AOME_SET_SSIM_RD_MULT = AOME_SET_TPL_STRENGTH + 4,
+
+  // Clybpatch -- Add force enable luma bias, even when not using Variance AQ.
+  AOME_SET_LUMA_BIAS = AOME_SET_TPL_STRENGTH + 5,
+
+  // ClybPatch -- rdmult multiplier for the temporal layer
+  AOME_SET_CHROMA_Q_OFFSET = AOME_SET_TPL_STRENGTH + 6,
   /*!\brief Codec control function to get the number of operating points. int*
    * parameter.
    */
@@ -1528,7 +1558,10 @@ typedef struct aom_scaling_mode {
 typedef enum {
   AOM_CONTENT_DEFAULT,
   AOM_CONTENT_SCREEN,
+  AOM_CONTENT_DEFAULT_NO_SCREEN,
   AOM_CONTENT_FILM,
+  AOM_CONTENT_PSY,
+  AOM_CONTENT_ANIMATION,
   AOM_CONTENT_INVALID
 } aom_tune_content;
 
@@ -1553,6 +1586,9 @@ typedef enum {
   AOM_TUNE_VMAF_MAX_GAIN = 6,
   AOM_TUNE_VMAF_NEG_MAX_GAIN = 7,
   AOM_TUNE_BUTTERAUGLI = 8,
+  AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY = 9,
+  AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY_VMAF_PSY_QP = 10,
+  AOM_TUNE_FAST_VMAF_PSY_QP = 11,
 } aom_tune_metric;
 
 /*!\brief Distortion metric to use for RD optimization.
@@ -1648,6 +1684,9 @@ AOM_CTRL_USE_TYPE(AOME_SET_ENABLEAUTOALTREF, unsigned int)
 
 AOM_CTRL_USE_TYPE(AOME_SET_SHARPNESS, unsigned int)
 #define AOM_CTRL_AOME_SET_SHARPNESS
+
+AOM_CTRL_USE_TYPE(AOME_SET_QUANT_SHARPNESS, unsigned int)
+#define AOM_CTRL_AOME_SET_QUANT_SHARPNESS
 
 AOM_CTRL_USE_TYPE(AOME_SET_STATIC_THRESHOLD, unsigned int)
 #define AOM_CTRL_AOME_SET_STATIC_THRESHOLD
@@ -2067,6 +2106,30 @@ AOM_CTRL_USE_TYPE(AV1E_SET_FP_MT_UNIT_TEST, unsigned int)
 
 AOM_CTRL_USE_TYPE(AV1E_GET_TARGET_SEQ_LEVEL_IDX, int *)
 #define AOM_CTRL_AV1E_GET_TARGET_SEQ_LEVEL_IDX
+
+AOM_CTRL_USE_TYPE(AOME_SET_DQ_MODULATE, int)
+#define AOM_CTRL_AOME_SET_DQ_MODULATE
+
+AOM_CTRL_USE_TYPE(AOME_SET_TPL_STRENGTH, int)
+#define AOM_CTRL_AOME_SET_TPL_STRENGTH
+
+AOM_CTRL_USE_TYPE(AOME_SET_TPL_STRENGTH_POS, int)
+#define AOM_CTRL_AOME_SET_TPL_STRENGTH_POS
+
+AOM_CTRL_USE_TYPE(AOME_SET_TPL_STRENGTH_NEG, int)
+#define AOM_CTRL_AOME_SET_TPL_STRENGTH_NEG
+
+AOM_CTRL_USE_TYPE(AOME_SET_VMAF_MOTION_MULT, int)
+#define AOM_CTRL_AOME_SET_VMAF_MOTION_MULT
+
+AOM_CTRL_USE_TYPE(AOME_SET_SSIM_RD_MULT, int)
+#define AOM_CTRL_AOME_SET_SSIM_RD_MULT
+
+AOM_CTRL_USE_TYPE(AOME_SET_LUMA_BIAS, int)
+#define AOM_CTRL_AOME_SET_LUMA_BIAS
+
+AOM_CTRL_USE_TYPE(AOME_SET_CHROMA_Q_OFFSET, int)
+#define AOM_CTRL_AOME_SET_CHROMA_Q_OFFSET
 
 AOM_CTRL_USE_TYPE(AV1E_GET_NUM_OPERATING_POINTS, int *)
 #define AOM_CTRL_AV1E_GET_NUM_OPERATING_POINTS

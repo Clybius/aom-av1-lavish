@@ -1345,12 +1345,14 @@ int av1_choose_var_based_partitioning(AV1_COMP *cpi, const TileInfo *const tile,
   chroma_check(cpi, x, bsize, y_sad_last, y_sad_g, is_key_frame, zero_motion,
                uv_sad);
 
-  x->force_zeromv_skip_for_sb = 0;
+  x->force_zeromv_skip = 0;
   const bool is_set_force_zeromv_skip =
       is_set_force_zeromv_skip_based_on_src_sad(
           cpi->sf.rt_sf.set_zeromv_skip_based_on_source_sad,
           x->content_state_sb.source_sad_nonrd);
 
+  const unsigned int thresh_exit_part =
+      (cm->seq_params->sb_size == BLOCK_64X64) ? 5000 : 10000;
   // If the superblock is completely static (zero source sad) and
   // the y_sad (relative to LAST ref) is very small, take the sb_size partition
   // and exit, and force zeromv_last skip mode for nonrd_pickmode.
@@ -1361,25 +1363,18 @@ int av1_choose_var_based_partitioning(AV1_COMP *cpi, const TileInfo *const tile,
       cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ &&
       cpi->cyclic_refresh->apply_cyclic_refresh &&
       segment_id == CR_SEGMENT_ID_BASE && is_set_force_zeromv_skip &&
-      ref_frame_partition == LAST_FRAME && xd->mi[0]->mv[0].as_int == 0) {
+      ref_frame_partition == LAST_FRAME && xd->mi[0]->mv[0].as_int == 0 &&
+      y_sad < thresh_exit_part && uv_sad[0]<(3 * thresh_exit_part)>> 2 &&
+      uv_sad[1]<(3 * thresh_exit_part)>> 2) {
     const int block_width = mi_size_wide[cm->seq_params->sb_size];
     const int block_height = mi_size_high[cm->seq_params->sb_size];
-    const unsigned int thresh_exit_part_y =
-        cpi->zeromv_skip_thresh_exit_part[bsize];
-    const unsigned int thresh_exit_part_uv =
-        CALC_CHROMA_THRESH_FOR_ZEROMV_SKIP(thresh_exit_part_y);
     if (mi_col + block_width <= tile->mi_col_end &&
-        mi_row + block_height <= tile->mi_row_end &&
-        y_sad < thresh_exit_part_y && uv_sad[0] < thresh_exit_part_uv &&
-        uv_sad[1] < thresh_exit_part_uv) {
+        mi_row + block_height <= tile->mi_row_end) {
       set_block_size(cpi, mi_row, mi_col, bsize);
-      x->force_zeromv_skip_for_sb = 1;
+      x->force_zeromv_skip = 1;
       if (vt2) aom_free(vt2);
       if (vt) aom_free(vt);
       return 0;
-    } else if (x->content_state_sb.source_sad_nonrd == kZeroSad &&
-               cpi->sf.rt_sf.part_early_exit_zeromv >= 2) {
-      x->force_zeromv_skip_for_sb = 2;
     }
   }
 

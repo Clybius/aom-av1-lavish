@@ -99,13 +99,13 @@ void av1_init_plane_quantizers(const struct AV1_COMP *cpi, MACROBLOCK *x,
 void av1_build_quantizer(aom_bit_depth_t bit_depth, int y_dc_delta_q,
                          int u_dc_delta_q, int u_ac_delta_q, int v_dc_delta_q,
                          int v_ac_delta_q, QUANTS *const quants,
-                         Dequants *const deq);
+                         Dequants *const deq, int quant_sharpness);
 
 void av1_init_quantizer(EncQuantDequantParams *const enc_quant_dequant_params,
                         const CommonQuantParams *quant_params,
-                        aom_bit_depth_t bit_depth);
+                        aom_bit_depth_t bit_depth, int quant_sharpness);
 
-void av1_set_quantizer(struct AV1Common *const cm, int min_qmlevel,
+void av1_set_quantizer(struct AV1_COMP *const cpi, int min_qmlevel,
                        int max_qmlevel, int q, int enable_chroma_deltaq,
                        int enable_hdr_deltaq);
 

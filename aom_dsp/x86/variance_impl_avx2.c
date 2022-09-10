@@ -171,9 +171,9 @@ int aom_sub_pixel_variance32xh_avx2(const uint8_t *src, int src_stride,
   __m256i sse_reg, sum_reg, sse_reg_hi, res_cmp, sum_reg_lo, sum_reg_hi;
   __m256i zero_reg;
   int i, sum;
-  sum_reg = _mm256_setzero_si256();
-  sse_reg = _mm256_setzero_si256();
-  zero_reg = _mm256_setzero_si256();
+  sum_reg = _mm256_set1_epi16(0);
+  sse_reg = _mm256_set1_epi16(0);
+  zero_reg = _mm256_set1_epi16(0);
 
   // x_offset = 0 and y_offset = 0
   if (x_offset == 0) {
@@ -359,9 +359,9 @@ int aom_sub_pixel_variance16xh_avx2(const uint8_t *src, int src_stride,
   __m256i sse_reg, sum_reg, sse_reg_hi, res_cmp, sum_reg_lo, sum_reg_hi;
   __m256i zero_reg;
   int i, sum;
-  sum_reg = _mm256_setzero_si256();
-  sse_reg = _mm256_setzero_si256();
-  zero_reg = _mm256_setzero_si256();
+  sum_reg = _mm256_set1_epi16(0);
+  sse_reg = _mm256_set1_epi16(0);
+  zero_reg = _mm256_set1_epi16(0);
 
   // x_offset = 0 and y_offset = 0
   if (x_offset == 0) {
@@ -599,9 +599,9 @@ int aom_sub_pixel_avg_variance32xh_avx2(const uint8_t *src, int src_stride,
   __m256i sse_reg, sum_reg, sse_reg_hi, res_cmp, sum_reg_lo, sum_reg_hi;
   __m256i zero_reg;
   int i, sum;
-  sum_reg = _mm256_setzero_si256();
-  sse_reg = _mm256_setzero_si256();
-  zero_reg = _mm256_setzero_si256();
+  sum_reg = _mm256_set1_epi16(0);
+  sse_reg = _mm256_set1_epi16(0);
+  zero_reg = _mm256_set1_epi16(0);
 
   // x_offset = 0 and y_offset = 0
   if (x_offset == 0) {

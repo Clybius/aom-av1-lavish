@@ -128,6 +128,7 @@ static int fourcc_is_ivf(const char detect[4]) {
 static const int av1_arg_ctrl_map[] = { AOME_SET_CPUUSED,
                                         AOME_SET_ENABLEAUTOALTREF,
                                         AOME_SET_SHARPNESS,
+                                        AOME_SET_QUANT_SHARPNESS,
                                         AOME_SET_STATIC_THRESHOLD,
                                         AV1E_SET_ROW_MT,
                                         AV1E_SET_FP_MT,
@@ -237,6 +238,14 @@ static const int av1_arg_ctrl_map[] = { AOME_SET_CPUUSED,
                                         AV1E_SET_ENABLE_TX_SIZE_SEARCH,
                                         AV1E_SET_LOOPFILTER_CONTROL,
                                         AV1E_SET_AUTO_INTRA_TOOLS_OFF,
+                                        AOME_SET_DQ_MODULATE,
+                                        AOME_SET_TPL_STRENGTH,
+                                        AOME_SET_TPL_STRENGTH_POS,
+                                        AOME_SET_TPL_STRENGTH_NEG,
+                                        AOME_SET_VMAF_MOTION_MULT,
+                                        AOME_SET_SSIM_RD_MULT,
+                                        AOME_SET_LUMA_BIAS,
+                                        AOME_SET_CHROMA_Q_OFFSET,
                                         0 };
 
 const arg_def_t *main_args[] = { &g_av1_codec_arg_defs.help,
@@ -332,6 +341,7 @@ const arg_def_t *av1_ctrl_args[] = {
   &g_av1_codec_arg_defs.cpu_used_av1,
   &g_av1_codec_arg_defs.auto_altref,
   &g_av1_codec_arg_defs.sharpness,
+  &g_av1_codec_arg_defs.quant_sharpness,
   &g_av1_codec_arg_defs.static_thresh,
   &g_av1_codec_arg_defs.rowmtarg,
   &g_av1_codec_arg_defs.fpmtarg,
@@ -441,6 +451,14 @@ const arg_def_t *av1_ctrl_args[] = {
   &g_av1_codec_arg_defs.enable_tx_size_search,
   &g_av1_codec_arg_defs.loopfilter_control,
   &g_av1_codec_arg_defs.auto_intra_tools_off,
+  &g_av1_codec_arg_defs.dq_modulate,
+  &g_av1_codec_arg_defs.tpl_strength,
+  &g_av1_codec_arg_defs.tpl_strength_pos,
+  &g_av1_codec_arg_defs.tpl_strength_neg,
+  &g_av1_codec_arg_defs.vmaf_motion_mult,
+  &g_av1_codec_arg_defs.ssim_rd_mult,
+  &g_av1_codec_arg_defs.luma_bias,
+  &g_av1_codec_arg_defs.chroma_q_offset,
   NULL,
 };
 
@@ -1914,22 +1932,18 @@ static void test_decode(struct stream_state *stream,
   aom_img_free(&dec_img);
 }
 
-static void print_time(const char *label, int64_t etl) {
-  int64_t hours;
+static void print_time(int64_t etl) {
   int64_t mins;
   int64_t secs;
 
   if (etl >= 0) {
-    hours = etl / 3600;
-    etl -= hours * 3600;
     mins = etl / 60;
     etl -= mins * 60;
     secs = etl;
 
-    fprintf(stderr, "[%3s %2" PRId64 ":%02" PRId64 ":%02" PRId64 "] ", label,
-            hours, mins, secs);
+    fprintf(stderr, "%2" PRId64 ":%02" PRId64, mins, secs);
   } else {
-    fprintf(stderr, "[%3s  unknown] ", label);
+    fprintf(stderr, "unknown");
   }
 }
 
@@ -2060,9 +2074,6 @@ int main(int argc, const char **argv_) {
     }
 
     int frames_in = 0, seen_frames = 0;
-    int64_t estimated_time_left = -1;
-    int64_t average_rate = -1;
-    int64_t lagged_count = 0;
     const int need_downscale =
         pass_need_downscale(global.pass, global.passes, pass);
 
@@ -2418,17 +2429,24 @@ int main(int argc, const char **argv_) {
           float fps = usec_to_fps(cx_time, seen_frames);
           fprintf(stderr, "\rPass %d/%d ", pass + 1, global.passes);
 
+          int64_t bytes = (int64_t)streams->nbytes;
           if (stream_cnt == 1)
-            fprintf(stderr, "frame %4d/%-4d %7" PRId64 "B ", frames_in,
-                    streams->frames_out, (int64_t)streams->nbytes);
+            fprintf(stderr, "frame %4d/%-4d", frames_in, streams->frames_out);
           else
-            fprintf(stderr, "frame %4d ", frames_in);
+            fprintf(stderr, "frame %4d", frames_in);
 
-          fprintf(stderr, "%7" PRId64 " %s %.2f %s ",
-                  cx_time > 9999999 ? cx_time / 1000 : cx_time,
-                  cx_time > 9999999 ? "ms" : "us", fps >= 1.0 ? fps : fps * 60,
-                  fps >= 1.0 ? "fps" : "fpm");
-          print_time("ETA", estimated_time_left);
+          print_time(cx_time / 1000000);
+          if (global.pass == global.passes) {
+            fprintf(stderr, " %5lu KB    %6.2f fps  %7.1f Kbps", bytes / 1000,
+                    fps,
+                    streams->frames_out > 0
+                        ? (float)bytes * 8. / 1000. / streams->frames_out *
+                              input.framerate.numerator /
+                              input.framerate.denominator
+                        : 0.);
+          } else {
+            fprintf(stderr, "             %6.2f fps", fps);
+          }
           // mingw-w64 gcc does not match msvc for stderr buffering behavior
           // and uses line buffering, thus the progress output is not
           // real-time. The fflush() is here to make sure the progress output
@@ -2483,33 +2501,6 @@ int main(int argc, const char **argv_) {
           get_cx_data(stream, &global, &got_data);
         }
 
-        if (!got_data && input.length && streams != NULL &&
-            !streams->frames_out) {
-          lagged_count = global.limit ? seen_frames : ftello(input.file);
-        } else if (input.length) {
-          int64_t remaining;
-          int64_t rate;
-
-          if (global.limit) {
-            const int64_t frame_in_lagged = (seen_frames - lagged_count) * 1000;
-
-            rate = cx_time ? frame_in_lagged * (int64_t)1000000 / cx_time : 0;
-            remaining = 1000 * (global.limit - global.skip_frames -
-                                seen_frames + lagged_count);
-          } else {
-            const int64_t input_pos = ftello(input.file);
-            const int64_t input_pos_lagged = input_pos - lagged_count;
-            const int64_t input_limit = input.length;
-
-            rate = cx_time ? input_pos_lagged * (int64_t)1000000 / cx_time : 0;
-            remaining = input_limit - input_pos + lagged_count;
-          }
-
-          average_rate =
-              (average_rate <= 0) ? rate : (average_rate * 7 + rate) / 8;
-          estimated_time_left = average_rate ? remaining / average_rate : -1;
-        }
-
         if (got_data && global.test_decode != TEST_DECODE_OFF) {
           FOREACH_STREAM(stream, streams) {
             test_decode(stream, global.test_decode);
@@ -2519,29 +2510,6 @@ int main(int argc, const char **argv_) {
 
       fflush(stdout);
       if (!global.quiet) fprintf(stderr, "\033[K");
-    }
-
-    if (stream_cnt > 1) fprintf(stderr, "\n");
-
-    if (!global.quiet) {
-      FOREACH_STREAM(stream, streams) {
-        const int64_t bpf =
-            seen_frames ? (int64_t)(stream->nbytes * 8 / seen_frames) : 0;
-        const int64_t bps = bpf * global.framerate.num / global.framerate.den;
-        fprintf(stderr,
-                "\rPass %d/%d frame %4d/%-4d %7" PRId64 "B %7" PRId64
-                "b/f %7" PRId64
-                "b/s"
-                " %7" PRId64 " %s (%.2f fps)\033[K\n",
-                pass + 1, global.passes, frames_in, stream->frames_out,
-                (int64_t)stream->nbytes, bpf, bps,
-                stream->cx_time > 9999999 ? stream->cx_time / 1000
-                                          : stream->cx_time,
-                stream->cx_time > 9999999 ? "ms" : "us",
-                usec_to_fps(stream->cx_time, seen_frames));
-        // This instance of cr does not need fflush as it is followed by a
-        // newline in the same string.
-      }
     }
 
     if (global.show_psnr >= 1) {

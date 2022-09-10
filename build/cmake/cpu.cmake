@@ -20,19 +20,6 @@ if("${AOM_TARGET_CPU}" MATCHES "^arm")
     set(HAVE_NEON 0)
     set(AOM_RTCD_FLAGS ${AOM_RTCD_FLAGS} --disable-neon)
   endif()
-
-  check_c_source_compiles("
-    #if !defined(__ARM_FEATURE_CRC32) || __ARM_FEATURE_CRC32 != 1
-    #error \"CRC32 is unavailable.\"
-    #endif
-    int main(void) { return 0; }" HAVE_CRC32)
-  if(HAVE_CRC32)
-    set(HAVE_ARM_CRC32 1)
-  else()
-    set(HAVE_ARM_CRC32 0)
-    set(AOM_RTCD_FLAGS ${AOM_RTCD_FLAGS} --disable-arm_crc32)
-  endif()
-
 elseif("${AOM_TARGET_CPU}" MATCHES "^mips")
   set(ARCH_MIPS 1)
   set(RTCD_ARCH_MIPS "yes")

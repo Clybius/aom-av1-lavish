@@ -109,7 +109,7 @@ int write_webm_file_header(struct WebmOutputContext *webm_ctx,
 
   const uint64_t kTimecodeScale = 1000000;
   info->set_timecode_scale(kTimecodeScale);
-  std::string version = "aomenc";
+  std::string version = "aomenc-psy";
   if (!webm_ctx->debug) {
     version.append(std::string(" ") + aom_codec_version_str());
   }

@@ -65,7 +65,8 @@ void av1_vaq_frame_setup(AV1_COMP *cpi) {
   }
   if (frame_is_intra_only(cm) || cm->features.error_resilient_mode ||
       refresh_frame->alt_ref_frame ||
-      (refresh_frame->golden_frame && !cpi->rc.is_src_frame_alt_ref)) {
+      (refresh_frame->golden_frame && !cpi->rc.is_src_frame_alt_ref) ||
+      cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY) {
     cpi->vaq_refresh = 1;
 
     av1_enable_segmentation(seg);
@@ -141,13 +142,32 @@ int av1_log_block_var(const AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bs) {
   return (int)(var);
 }
 
-int av1_log_block_avg(const AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bs,
-                      int mi_row, int mi_col) {
+int av1_log_block_avg(MACROBLOCK *x, BLOCK_SIZE bs) {
   // This functions returns the block average of luma block
   unsigned int sum, avg, num_pix;
   int r, c;
-  const int pic_w = cpi->common.width;
-  const int pic_h = cpi->common.height;
+  const int bw = MI_SIZE * mi_size_wide[bs];
+  const int bh = MI_SIZE * mi_size_high[bs];
+
+  sum = 0;
+  num_pix = 0;
+  avg = 0;
+  for (r = 0; r < bh; r++) {
+    for (c = 0; c < bw; c++) {
+      sum += *(x->plane[0].src.buf + r * x->plane[0].src.stride + c);
+      num_pix++;
+    }
+  }
+  if (num_pix != 0) {
+    avg = sum / num_pix;
+  }
+  return avg;
+}
+
+int av1_log_block_avg_hbd(MACROBLOCK *x, BLOCK_SIZE bs) {
+  // This functions returns the block average of luma block
+  unsigned int sum, avg, num_pix;
+  int r, c;
   const int bw = MI_SIZE * mi_size_wide[bs];
   const int bh = MI_SIZE * mi_size_high[bs];
   const uint16_t *x16 = CONVERT_TO_SHORTPTR(x->plane[0].src.buf);
@@ -155,10 +175,8 @@ int av1_log_block_avg(const AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bs,
   sum = 0;
   num_pix = 0;
   avg = 0;
-  int row = mi_row << MI_SIZE_LOG2;
-  int col = mi_col << MI_SIZE_LOG2;
-  for (r = row; (r < (row + bh)) && (r < pic_h); r++) {
-    for (c = col; (c < (col + bw)) && (c < pic_w); c++) {
+  for (r = 0; r < bh; r++) {
+    for (c = 0; c < bw; c++) {
       sum += *(x16 + r * x->plane[0].src.stride + c);
       num_pix++;
     }
@@ -205,7 +223,7 @@ int av1_compute_q_from_energy_level_deltaq_mode(const AV1_COMP *const cpi,
   int rate_level;
   const AV1_COMMON *const cm = &cpi->common;
 
-  if (DELTA_Q_PERCEPTUAL_MODULATION == 1) {
+  if (DELTA_Q_PERCEPTUAL_MODULATION == 1 && cpi->oxcf.dq_modulate == 1) {
     ENERGY_IN_BOUNDS(block_var_level);
     rate_level = SEGMENT_ID(block_var_level);
   } else {

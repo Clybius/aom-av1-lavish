@@ -1425,7 +1425,7 @@ static void fadst4x4_new_sse2(const __m128i *input, __m128i *output,
   const __m128i sinpi_p03_p04 = pair_set_epi16(sinpi[3], sinpi[4]);
   const __m128i sinpi_m03_p02 = pair_set_epi16(-sinpi[3], sinpi[2]);
   const __m128i sinpi_p03_p03 = _mm_set1_epi16((int16_t)sinpi[3]);
-  const __m128i __zero = _mm_setzero_si128();
+  const __m128i __zero = _mm_set1_epi16(0);
   const __m128i __rounding = _mm_set1_epi32(1 << (cos_bit - 1));
   const __m128i in7 = _mm_add_epi16(input[0], input[1]);
   __m128i u[8], v[8];
@@ -1573,7 +1573,7 @@ static void fadst8x4_new_sse2(const __m128i *input, __m128i *output,
   const __m128i sinpi_p03_p04 = pair_set_epi16(sinpi[3], sinpi[4]);
   const __m128i sinpi_m03_p02 = pair_set_epi16(-sinpi[3], sinpi[2]);
   const __m128i sinpi_p03_p03 = _mm_set1_epi16((int16_t)sinpi[3]);
-  const __m128i __zero = _mm_setzero_si128();
+  const __m128i __zero = _mm_set1_epi16(0);
   const __m128i __rounding = _mm_set1_epi32(1 << (cos_bit - 1));
   const __m128i in7 = _mm_add_epi16(input[0], input[1]);
   __m128i u_lo[8], u_hi[8], v_lo[8], v_hi[8];

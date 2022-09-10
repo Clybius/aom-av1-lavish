@@ -460,7 +460,10 @@ int av1_calc_normalized_variance(aom_variance_fn_t vf, const uint8_t *const buf,
 static AOM_INLINE bool is_src_var_for_4x4_sub_blocks_caching_enabled(
     const AV1_COMP *const cpi) {
   const SPEED_FEATURES *const sf = &cpi->sf;
-  if (cpi->oxcf.mode != ALLINTRA) return false;
+  if (cpi->oxcf.mode != ALLINTRA &&
+      cpi->oxcf.tune_cfg.content != AOM_CONTENT_PSY &&
+      cpi->oxcf.tune_cfg.content != AOM_CONTENT_ANIMATION)
+    return false;
 
   if (sf->part_sf.partition_search_type == SEARCH_PARTITION) return true;
 

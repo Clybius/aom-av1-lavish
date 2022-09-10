@@ -37,6 +37,7 @@ struct av1_extracfg {
   unsigned int enable_auto_bwd_ref;
   unsigned int noise_sensitivity;
   unsigned int sharpness;
+  unsigned int quant_sharpness;
   unsigned int static_thresh;
   unsigned int row_mt;
   unsigned int fp_mt;
@@ -189,6 +190,14 @@ struct av1_extracfg {
   int auto_intra_tools_off;
   int strict_level_conformance;
   int kf_max_pyr_height;
+  int dq_modulate;
+  int tpl_strength;
+  int tpl_strength_pos;
+  int tpl_strength_neg;
+  int vmaf_motion_mult;
+  int ssim_rd_mult;
+  int luma_bias;
+  int chroma_q_offset;
 };
 
 #if CONFIG_REALTIME_ONLY
@@ -211,6 +220,7 @@ static const struct av1_extracfg default_extra_cfg = {
   0,              // enable_auto_bwd_ref
   0,              // noise_sensitivity
   0,              // sharpness
+  0,              // quant_sharpness
   0,              // static_thresh
   1,              // row_mt
   0,              // fp_mt
@@ -350,14 +360,23 @@ static const struct av1_extracfg default_extra_cfg = {
   0,               // auto_intra_tools_off
   0,               // strict_level_conformance
   -1,              // kf_max_pyr_height
+  1,               // dq_modulate
+  100,             // tpl_strength
+  100,             // tpl_strength_pos
+  100,             // tpl_strength_neg
+  100,             // vmaf_motion_mult
+  100,             // ssim_rd_mult
+  1,               // luma_bias
+  0,               // chroma_q_offset
 };
 #else
 static const struct av1_extracfg default_extra_cfg = {
-  0,              // cpu_used
+  3,              // cpu_used
   1,              // enable_auto_alt_ref
   0,              // enable_auto_bwd_ref
   0,              // noise_sensitivity
   0,              // sharpness
+  0,              // quant_sharpness
   0,              // static_thresh
   1,              // row_mt
   0,              // fp_mt
@@ -370,7 +389,7 @@ static const struct av1_extracfg default_extra_cfg = {
   0,              // min_gf_interval; 0 -> default decision
   0,              // max_gf_interval; 0 -> default decision
   0,              // gf_min_pyr_height
-  5,              // gf_max_pyr_height
+  4,              // gf_max_pyr_height
   AOM_TUNE_PSNR,  // tuning
   "/usr/local/share/model/vmaf_v0.6.1.json",  // VMAF model path
   ".",                                        // partition info path
@@ -396,13 +415,13 @@ static const struct av1_extracfg default_extra_cfg = {
   AOM_TIMING_UNSPECIFIED,       // No picture timing signaling in bitstream
   0,                            // frame_parallel_decoding_mode
   1,                            // enable dual filter
-  0,                            // enable delta quant in chroma planes
+  1,                            // enable delta quant in chroma planes
   NO_AQ,                        // aq_mode
   DELTA_Q_OBJECTIVE,            // deltaq_mode
   100,                          // deltaq_strength
   0,                            // delta lf mode
   0,                            // frame_periodic_boost
-  AOM_BITS_8,                   // Bit depth
+  AOM_BITS_10,                  // Bit depth
   AOM_CONTENT_DEFAULT,          // content
   AOM_CICP_CP_UNSPECIFIED,      // CICP color primaries
   AOM_CICP_TC_UNSPECIFIED,      // CICP transfer characteristics
@@ -461,7 +480,7 @@ static const struct av1_extracfg default_extra_cfg = {
 #if CONFIG_DENOISE
   0,   // noise_level
   32,  // noise_block_size
-  1,   // enable_dnl_denoising
+  0,   // enable_dnl_denoising
 #endif
   0,   // chroma_subsampling_x
   0,   // chroma_subsampling_y
@@ -497,6 +516,14 @@ static const struct av1_extracfg default_extra_cfg = {
   0,               // auto_intra_tools_off
   0,               // strict_level_conformance
   -1,              // kf_max_pyr_height
+  1,               // dq_modulate
+  100,             // tpl_strength
+  100,             // tpl_strength_pos
+  100,             // tpl_strength_neg
+  100,             // vmaf_motion_mult
+  100,             // ssim_rd_mult
+  1,               // luma_bias
+  0,               // chroma_q_offset
 };
 #endif
 
@@ -708,6 +735,7 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
         "coding.");
 
   RANGE_CHECK_HI(extra_cfg, sharpness, 7);
+  RANGE_CHECK_HI(extra_cfg, quant_sharpness, 7);
   RANGE_CHECK_HI(extra_cfg, arnr_max_frames, 15);
   RANGE_CHECK_HI(extra_cfg, arnr_strength, 6);
   RANGE_CHECK_HI(extra_cfg, cq_level, 63);
@@ -790,15 +818,17 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
 #endif
 
 #if !CONFIG_TUNE_VMAF
-  if (extra_cfg->tuning >= AOM_TUNE_VMAF_WITH_PREPROCESSING &&
-      extra_cfg->tuning <= AOM_TUNE_VMAF_NEG_MAX_GAIN) {
+  if ((extra_cfg->tuning >= AOM_TUNE_VMAF_WITH_PREPROCESSING &&
+       extra_cfg->tuning <= AOM_TUNE_VMAF_NEG_MAX_GAIN) ||
+       extra_cfg->tuning >= AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY_VMAF_PSY_QP) {
     ERROR(
         "This error may be related to the wrong configuration options: try to "
         "set -DCONFIG_TUNE_VMAF=1 at the time CMake is run.");
   }
 #endif
 
-  RANGE_CHECK(extra_cfg, tuning, AOM_TUNE_PSNR, AOM_TUNE_BUTTERAUGLI);
+  RANGE_CHECK(extra_cfg, tuning, AOM_TUNE_PSNR,
+              AOM_TUNE_FAST_VMAF_PSY_QP);
 
   RANGE_CHECK(extra_cfg, dist_metric, AOM_DIST_METRIC_PSNR,
               AOM_DIST_METRIC_QM_PSNR);
@@ -832,7 +862,8 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
 
   for (int i = 0; i < MAX_NUM_OPERATING_POINTS; ++i) {
     const int level_idx = extra_cfg->target_seq_level_idx[i];
-    if (!is_valid_seq_level_idx(level_idx) && level_idx != SEQ_LEVELS) {
+    if (!is_valid_seq_level_idx(level_idx) &&
+        level_idx != SEQ_LEVEL_KEEP_STATS) {
       ERROR("Target sequence level index is invalid");
     }
   }
@@ -850,6 +881,13 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
         "The value of kf-max-pyr-height should not be smaller than "
         "gf-min-pyr-height");
   }
+  RANGE_CHECK(extra_cfg, tpl_strength, 1, 1000);
+  RANGE_CHECK(extra_cfg, tpl_strength_pos, 1, 1000);
+  RANGE_CHECK(extra_cfg, tpl_strength_neg, 1, 1000);
+  RANGE_CHECK(extra_cfg, vmaf_motion_mult, 1, 1000);
+  RANGE_CHECK(extra_cfg, ssim_rd_mult, 1, 1000);
+  RANGE_CHECK_BOOL(extra_cfg, luma_bias);
+  RANGE_CHECK(extra_cfg, chroma_q_offset, -63, 63);
 
   return AOM_CODEC_OK;
 }
@@ -931,10 +969,11 @@ static void update_default_encoder_config(const cfg_options_t *cfg,
                                           struct av1_extracfg *extra_cfg) {
   extra_cfg->enable_cdef = (cfg->disable_cdef == 0) ? 1 : 0;
   extra_cfg->enable_restoration = (cfg->disable_lr == 0);
-  extra_cfg->superblock_size =
-      (cfg->super_block_size == 64)    ? AOM_SUPERBLOCK_SIZE_64X64
-      : (cfg->super_block_size == 128) ? AOM_SUPERBLOCK_SIZE_128X128
-                                       : AOM_SUPERBLOCK_SIZE_DYNAMIC;
+  extra_cfg->superblock_size = (cfg->super_block_size == 64)
+                                   ? AOM_SUPERBLOCK_SIZE_64X64
+                                   : (cfg->super_block_size == 128)
+                                         ? AOM_SUPERBLOCK_SIZE_128X128
+                                         : AOM_SUPERBLOCK_SIZE_DYNAMIC;
   extra_cfg->enable_warped_motion = (cfg->disable_warp_motion == 0);
   extra_cfg->enable_dist_wtd_comp = (cfg->disable_dist_wtd_comp == 0);
   extra_cfg->enable_diff_wtd_comp = (cfg->disable_diff_wtd_comp == 0);
@@ -1185,6 +1224,7 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   algo_cfg->enable_overlay = extra_cfg->enable_overlay;
   algo_cfg->disable_trellis_quant = extra_cfg->disable_trellis_quant;
   algo_cfg->sharpness = extra_cfg->sharpness;
+  algo_cfg->quant_sharpness = extra_cfg->quant_sharpness;
   algo_cfg->arnr_max_frames = extra_cfg->arnr_max_frames;
   algo_cfg->arnr_strength = extra_cfg->arnr_strength;
   algo_cfg->cdf_update_mode = (uint8_t)extra_cfg->cdf_update_mode;
@@ -1256,7 +1296,6 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   oxcf->noise_block_size = extra_cfg->noise_block_size;
   oxcf->enable_dnl_denoising = extra_cfg->enable_dnl_denoising;
 #endif
-
 #if CONFIG_AV1_TEMPORAL_DENOISING
   // Temporal denoiser is for nonrd pickmode so disable it for speed < 7.
   // Also disable it for speed 7 for now since it needs to be modified for
@@ -1430,6 +1469,22 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
 
   oxcf->kf_max_pyr_height = extra_cfg->kf_max_pyr_height;
 
+  oxcf->dq_modulate = extra_cfg->dq_modulate;
+
+  oxcf->tpl_strength = extra_cfg->tpl_strength;
+
+  oxcf->tpl_strength_pos = extra_cfg->tpl_strength_pos;
+
+  oxcf->tpl_strength_neg = extra_cfg->tpl_strength_neg;
+
+  oxcf->vmaf_motion_mult = extra_cfg->vmaf_motion_mult;
+
+  oxcf->ssim_rd_mult = extra_cfg->ssim_rd_mult;
+
+  oxcf->luma_bias = extra_cfg->luma_bias;
+
+  oxcf->chroma_q_offset = extra_cfg->chroma_q_offset;
+
   return AOM_CODEC_OK;
 }
 
@@ -1580,6 +1635,13 @@ static aom_codec_err_t ctrl_set_sharpness(aom_codec_alg_priv_t *ctx,
                                           va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
   extra_cfg.sharpness = CAST(AOME_SET_SHARPNESS, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_quant_sharpness(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.quant_sharpness = CAST(AOME_SET_QUANT_SHARPNESS, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -2826,8 +2888,9 @@ static aom_codec_err_t encoder_encode(aom_codec_alg_priv_t *ctx,
   }
 
 #if CONFIG_TUNE_VMAF
-  if (ctx->extra_cfg.tuning >= AOM_TUNE_VMAF_WITH_PREPROCESSING &&
-      ctx->extra_cfg.tuning <= AOM_TUNE_VMAF_NEG_MAX_GAIN) {
+  if ((ctx->extra_cfg.tuning >= AOM_TUNE_VMAF_WITH_PREPROCESSING &&
+       ctx->extra_cfg.tuning <= AOM_TUNE_VMAF_NEG_MAX_GAIN) ||
+       ctx->extra_cfg.tuning >= AOM_TUNE_IMAGE_PERCEPTUAL_QUALITY_VMAF_PSY_QP) {
     aom_init_vmaf_model(&ppi->cpi->vmaf_info.vmaf_model,
                         ppi->cpi->oxcf.tune_cfg.vmaf_model_path);
   }
@@ -3571,6 +3634,9 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.sharpness, argv,
                               err_string)) {
     extra_cfg.sharpness = arg_parse_uint_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.quant_sharpness, argv,
+                              err_string)) {
+    extra_cfg.quant_sharpness = arg_parse_uint_helper(&arg, err_string);
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.static_thresh, argv,
                               err_string)) {
     extra_cfg.static_thresh = arg_parse_uint_helper(&arg, err_string);
@@ -3940,6 +4006,30 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.kf_max_pyr_height,
                               argv, err_string)) {
     extra_cfg.kf_max_pyr_height = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.dq_modulate,
+                              argv, err_string)) {
+    extra_cfg.dq_modulate = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tpl_strength,
+                              argv, err_string)) {
+    extra_cfg.tpl_strength = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tpl_strength_pos,
+                              argv, err_string)) {
+    extra_cfg.tpl_strength_pos = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tpl_strength_neg,
+                              argv, err_string)) {
+    extra_cfg.tpl_strength_neg = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.vmaf_motion_mult,
+                              argv, err_string)) {
+    extra_cfg.vmaf_motion_mult = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.ssim_rd_mult,
+                              argv, err_string)) {
+    extra_cfg.ssim_rd_mult = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.luma_bias,
+                              argv, err_string)) {
+    extra_cfg.luma_bias = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.chroma_q_offset,
+                              argv, err_string)) {
+    extra_cfg.chroma_q_offset = arg_parse_int_helper(&arg, err_string);
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tile_width, argv,
                               err_string)) {
     ctx->cfg.tile_width_count = arg_parse_list_helper(
@@ -3989,6 +4079,62 @@ static aom_codec_err_t ctrl_get_target_seq_level_idx(aom_codec_alg_priv_t *ctx,
                                       &ctx->ppi->level_params, arg);
 }
 
+static aom_codec_err_t ctrl_set_dq_modulate(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.dq_modulate = CAST(AOME_SET_DQ_MODULATE, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_tpl_strength(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.tpl_strength = CAST(AOME_SET_TPL_STRENGTH, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_tpl_strength_pos(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.tpl_strength_pos = CAST(AOME_SET_TPL_STRENGTH_POS, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_tpl_strength_neg(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.tpl_strength_neg = CAST(AOME_SET_TPL_STRENGTH_NEG, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_vmaf_motion_mult(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.vmaf_motion_mult = CAST(AOME_SET_VMAF_MOTION_MULT, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_ssim_rd_mult(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.ssim_rd_mult = CAST(AOME_SET_SSIM_RD_MULT, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_luma_bias(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.luma_bias = CAST(AOME_SET_LUMA_BIAS, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_chroma_q_offset(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.chroma_q_offset = CAST(AOME_SET_CHROMA_Q_OFFSET, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
 static aom_codec_err_t ctrl_get_num_operating_points(aom_codec_alg_priv_t *ctx,
                                                      va_list args) {
   int *const arg = va_arg(args, int *);
@@ -4011,6 +4157,7 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AOME_SET_ENABLEAUTOALTREF, ctrl_set_enable_auto_alt_ref },
   { AOME_SET_ENABLEAUTOBWDREF, ctrl_set_enable_auto_bwd_ref },
   { AOME_SET_SHARPNESS, ctrl_set_sharpness },
+  { AOME_SET_QUANT_SHARPNESS, ctrl_set_quant_sharpness },
   { AOME_SET_STATIC_THRESHOLD, ctrl_set_static_thresh },
   { AV1E_SET_ROW_MT, ctrl_set_row_mt },
   { AV1E_SET_FP_MT, ctrl_set_fp_mt },
@@ -4135,6 +4282,14 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV1E_SET_LOOPFILTER_CONTROL, ctrl_set_loopfilter_control },
   { AV1E_SET_AUTO_INTRA_TOOLS_OFF, ctrl_set_auto_intra_tools_off },
   { AV1E_SET_RTC_EXTERNAL_RC, ctrl_set_rtc_external_rc },
+  { AOME_SET_DQ_MODULATE, ctrl_set_dq_modulate },
+  { AOME_SET_TPL_STRENGTH, ctrl_set_tpl_strength },
+  { AOME_SET_TPL_STRENGTH_POS, ctrl_set_tpl_strength_pos },
+  { AOME_SET_TPL_STRENGTH_NEG, ctrl_set_tpl_strength_neg },
+  { AOME_SET_VMAF_MOTION_MULT, ctrl_set_vmaf_motion_mult },
+  { AOME_SET_SSIM_RD_MULT, ctrl_set_ssim_rd_mult },
+  { AOME_SET_LUMA_BIAS, ctrl_set_luma_bias },
+  { AOME_SET_CHROMA_Q_OFFSET, ctrl_set_chroma_q_offset },
 
   // Getters
   { AOME_GET_LAST_QUANTIZER, ctrl_get_quantizer },
@@ -4209,8 +4364,8 @@ static const aom_codec_enc_cfg_t encoder_usage_cfg[] = {
       // keyframing settings (kf)
       0,                       // fwd_kf_enabled
       AOM_KF_AUTO,             // kf_mode
-      0,                       // kf_min_dist
-      9999,                    // kf_max_dist
+      12,                      // kf_min_dist
+      240,                     // kf_max_dist
       0,                       // sframe_dist
       1,                       // sframe_mode
       0,                       // large_scale_tile
@@ -4376,7 +4531,7 @@ static const aom_codec_enc_cfg_t encoder_usage_cfg[] = {
 #define VERSION_STRING
 #endif
 aom_codec_iface_t aom_codec_av1_cx_algo = {
-  "AOMedia Project AV1 Encoder" VERSION_STRING,
+  "AOMedia Project AV1 Encoder Psy" VERSION_STRING,
   AOM_CODEC_INTERNAL_ABI_VERSION,
   AOM_CODEC_CAP_HIGHBITDEPTH | AOM_CODEC_CAP_ENCODER |
       AOM_CODEC_CAP_PSNR,  // aom_codec_caps_t

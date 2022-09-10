@@ -243,7 +243,7 @@ static AOM_INLINE void setup_delta_q(AV1_COMP *const cpi, ThreadData *td,
   const int delta_q_res = delta_q_info->delta_q_res;
   int current_qindex = cm->quant_params.base_qindex;
   if (cpi->oxcf.q_cfg.deltaq_mode == DELTA_Q_PERCEPTUAL) {
-    if (DELTA_Q_PERCEPTUAL_MODULATION == 1) {
+    if (DELTA_Q_PERCEPTUAL_MODULATION == 1 && cpi->oxcf.dq_modulate == 1) {
       const int block_wavelet_energy_level =
           av1_block_wavelet_energy_level(cpi, x, sb_size);
       x->sb_energy_level = block_wavelet_energy_level;
@@ -265,7 +265,7 @@ static AOM_INLINE void setup_delta_q(AV1_COMP *const cpi, ThreadData *td,
   } else if (cpi->oxcf.q_cfg.deltaq_mode == DELTA_Q_USER_RATING_BASED) {
     current_qindex = av1_get_sbq_user_rating_based(cpi, mi_row, mi_col);
   } else if (cpi->oxcf.q_cfg.enable_hdr_deltaq) {
-    current_qindex = av1_get_q_for_hdr(cpi, x, sb_size, mi_row, mi_col);
+    current_qindex = av1_get_q_for_hdr(cpi, x, sb_size);
   }
 
   MACROBLOCKD *const xd = &x->e_mbd;
@@ -803,9 +803,8 @@ static AOM_INLINE bool is_calc_src_content_needed(AV1_COMP *cpi,
  */
 // TODO(any): consolidate sfs to make interface cleaner
 static AOM_INLINE void grade_source_content_sb(AV1_COMP *cpi,
-                                               MACROBLOCK *const x,
-                                               TileDataEnc *tile_data,
-                                               int mi_row, int mi_col) {
+                                               MACROBLOCK *const x, int mi_row,
+                                               int mi_col) {
   AV1_COMMON *const cm = &cpi->common;
   bool calc_src_content = false;
 
@@ -824,8 +823,7 @@ static AOM_INLINE void grade_source_content_sb(AV1_COMP *cpi,
     else
       x->content_state_sb.source_sad_rd = kZeroSad;
   }
-  if (calc_src_content)
-    av1_source_content_sb(cpi, x, tile_data, mi_row, mi_col);
+  if (calc_src_content) av1_source_content_sb(cpi, x, mi_row, mi_col);
 }
 
 /*!\brief Encode a superblock row by breaking it into superblocks
@@ -912,9 +910,9 @@ static AOM_INLINE void encode_sb_row(AV1_COMP *cpi, ThreadData *td,
     x->content_state_sb.source_sad_rd = kMedSad;
     x->content_state_sb.lighting_change = 0;
     x->content_state_sb.low_sumdiff = 0;
-    x->force_zeromv_skip_for_sb = 0;
+    x->force_zeromv_skip = 0;
 
-    if (cpi->oxcf.mode == ALLINTRA) {
+    if (cpi->oxcf.mode == ALLINTRA || cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY) {
       x->intra_sb_rdmult_modifier = 128;
     }
 
@@ -941,7 +939,7 @@ static AOM_INLINE void encode_sb_row(AV1_COMP *cpi, ThreadData *td,
 
     // Grade the temporal variation of the sb, the grade will be used to decide
     // fast mode search strategy for coding blocks
-    grade_source_content_sb(cpi, x, tile_data, mi_row, mi_col);
+    grade_source_content_sb(cpi, x, mi_row, mi_col);
 
     // encode the superblock
     if (use_nonrd_mode) {
@@ -1387,43 +1385,6 @@ static int allow_deltaq_mode(AV1_COMP *cpi) {
 #endif  // !CONFIG_REALTIME_ONLY
 }
 
-#define FORCE_ZMV_SKIP_128X128_BLK_DIFF 10000
-#define FORCE_ZMV_SKIP_MAX_PER_PIXEL_DIFF 4
-
-// Populates block level thresholds for force zeromv-skip decision
-static void populate_thresh_to_force_zeromv_skip(AV1_COMP *cpi) {
-  if (cpi->sf.rt_sf.part_early_exit_zeromv == 0) return;
-
-  // Threshold for forcing zeromv-skip decision is as below:
-  // For 128x128 blocks, threshold is 10000 and per pixel threshold is 0.6103.
-  // For 64x64 blocks, threshold is 5000 and per pixel threshold is 1.221
-  // allowing slightly higher error for smaller blocks.
-  // Per Pixel Threshold of 64x64 block        Area of 64x64 block         1  1
-  // ------------------------------------=sqrt(---------------------)=sqrt(-)=-
-  // Per Pixel Threshold of 128x128 block      Area of 128x128 block       4  2
-  // Thus, per pixel thresholds for blocks of size 32x32, 16x16,...  can be
-  // chosen as 2.442, 4.884,.... As the per pixel error tends to be higher for
-  // small blocks, the same is clipped to 4.
-  const unsigned int thresh_exit_128x128_part = FORCE_ZMV_SKIP_128X128_BLK_DIFF;
-  const int num_128x128_pix =
-      block_size_wide[BLOCK_128X128] * block_size_high[BLOCK_128X128];
-
-  for (BLOCK_SIZE bsize = BLOCK_4X4; bsize < BLOCK_SIZES_ALL; bsize++) {
-    const int num_block_pix = block_size_wide[bsize] * block_size_high[bsize];
-
-    // Calculate the threshold for zeromv-skip decision based on area of the
-    // partition
-    unsigned int thresh_exit_part_blk =
-        (unsigned int)(thresh_exit_128x128_part *
-                           sqrt((double)num_block_pix / num_128x128_pix) +
-                       0.5);
-    thresh_exit_part_blk = AOMMIN(
-        thresh_exit_part_blk,
-        (unsigned int)(FORCE_ZMV_SKIP_MAX_PER_PIXEL_DIFF * num_block_pix));
-    cpi->zeromv_skip_thresh_exit_part[bsize] = thresh_exit_part_blk;
-  }
-}
-
 /*!\brief Encoder setup(only for the current frame), encoding, and recontruction
  * for a single frame
  *
@@ -1687,7 +1648,6 @@ static AOM_INLINE void encode_frame_internal(AV1_COMP *cpi) {
   // has to be called after 'skip_mode_flag' is initialized.
   av1_initialize_rd_consts(cpi);
   av1_set_sad_per_bit(cpi, &x->sadperbit, quant_params->base_qindex);
-  populate_thresh_to_force_zeromv_skip(cpi);
 
   enc_row_mt->sync_read_ptr = av1_row_mt_sync_read_dummy;
   enc_row_mt->sync_write_ptr = av1_row_mt_sync_write_dummy;

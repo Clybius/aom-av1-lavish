@@ -2819,10 +2819,8 @@ INSTANTIATE_TEST_SUITE_P(NEON, AvxSseTest,
                                                      &aom_get4x4sse_cs_neon)));
 
 INSTANTIATE_TEST_SUITE_P(NEON, AvxMseTest,
-                         ::testing::Values(MseParams(3, 3, &aom_mse8x8_neon),
-                                           MseParams(3, 4, &aom_mse8x16_neon),
-                                           MseParams(4, 4, &aom_mse16x16_neon),
-                                           MseParams(4, 3, &aom_mse16x8_neon)));
+                         ::testing::Values(MseParams(4, 4,
+                                                     &aom_mse16x16_neon)));
 
 const VarianceParams kArrayVariance_neon[] = {
   VarianceParams(7, 7, &aom_variance128x128_neon),

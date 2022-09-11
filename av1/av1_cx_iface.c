@@ -191,9 +191,9 @@ struct av1_extracfg {
   int strict_level_conformance;
   int kf_max_pyr_height;
   int dq_modulate;
-  int tpl_strength;
-  int tpl_strength_pos;
-  int tpl_strength_neg;
+  int delta_qindex_mult;
+  int delta_qindex_mult_pos;
+  int delta_qindex_mult_neg;
   int vmaf_motion_mult;
   int ssim_rd_mult;
   int luma_bias;
@@ -361,9 +361,9 @@ static const struct av1_extracfg default_extra_cfg = {
   0,               // strict_level_conformance
   -1,              // kf_max_pyr_height
   1,               // dq_modulate
-  100,             // tpl_strength
-  100,             // tpl_strength_pos
-  100,             // tpl_strength_neg
+  100,             // delta_qindex_mult
+  -1,             // delta_qindex_mult_pos
+  -1,             // delta_qindex_mult_neg
   100,             // vmaf_motion_mult
   100,             // ssim_rd_mult
   1,               // luma_bias
@@ -517,9 +517,9 @@ static const struct av1_extracfg default_extra_cfg = {
   0,               // strict_level_conformance
   -1,              // kf_max_pyr_height
   1,               // dq_modulate
-  100,             // tpl_strength
-  100,             // tpl_strength_pos
-  100,             // tpl_strength_neg
+  100,             // delta_qindex_mult
+  -1,             // delta_qindex_mult_pos
+  -1,             // delta_qindex_mult_neg
   100,             // vmaf_motion_mult
   100,             // ssim_rd_mult
   1,               // luma_bias
@@ -881,9 +881,9 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
         "The value of kf-max-pyr-height should not be smaller than "
         "gf-min-pyr-height");
   }
-  RANGE_CHECK(extra_cfg, tpl_strength, 1, 1000);
-  RANGE_CHECK(extra_cfg, tpl_strength_pos, 1, 1000);
-  RANGE_CHECK(extra_cfg, tpl_strength_neg, 1, 1000);
+  RANGE_CHECK(extra_cfg, delta_qindex_mult, 0, 1000);
+  RANGE_CHECK(extra_cfg, delta_qindex_mult_pos, -1, 1000);
+  RANGE_CHECK(extra_cfg, delta_qindex_mult_neg, -1, 1000);
   RANGE_CHECK(extra_cfg, vmaf_motion_mult, 1, 1000);
   RANGE_CHECK(extra_cfg, ssim_rd_mult, 1, 1000);
   RANGE_CHECK_BOOL(extra_cfg, luma_bias);
@@ -1471,11 +1471,11 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
 
   oxcf->dq_modulate = extra_cfg->dq_modulate;
 
-  oxcf->tpl_strength = extra_cfg->tpl_strength;
+  oxcf->delta_qindex_mult = extra_cfg->delta_qindex_mult;
 
-  oxcf->tpl_strength_pos = extra_cfg->tpl_strength_pos;
+  oxcf->delta_qindex_mult_pos = extra_cfg->delta_qindex_mult_pos;
 
-  oxcf->tpl_strength_neg = extra_cfg->tpl_strength_neg;
+  oxcf->delta_qindex_mult_neg = extra_cfg->delta_qindex_mult_neg;
 
   oxcf->vmaf_motion_mult = extra_cfg->vmaf_motion_mult;
 
@@ -4009,15 +4009,15 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.dq_modulate,
                               argv, err_string)) {
     extra_cfg.dq_modulate = arg_parse_int_helper(&arg, err_string);
-  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tpl_strength,
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.delta_qindex_mult,
                               argv, err_string)) {
-    extra_cfg.tpl_strength = arg_parse_int_helper(&arg, err_string);
-  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tpl_strength_pos,
+    extra_cfg.delta_qindex_mult = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.delta_qindex_mult_pos,
                               argv, err_string)) {
-    extra_cfg.tpl_strength_pos = arg_parse_int_helper(&arg, err_string);
-  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tpl_strength_neg,
+    extra_cfg.delta_qindex_mult_pos = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.delta_qindex_mult_neg,
                               argv, err_string)) {
-    extra_cfg.tpl_strength_neg = arg_parse_int_helper(&arg, err_string);
+    extra_cfg.delta_qindex_mult_neg = arg_parse_int_helper(&arg, err_string);
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.vmaf_motion_mult,
                               argv, err_string)) {
     extra_cfg.vmaf_motion_mult = arg_parse_int_helper(&arg, err_string);
@@ -4086,24 +4086,24 @@ static aom_codec_err_t ctrl_set_dq_modulate(aom_codec_alg_priv_t *ctx,
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
-static aom_codec_err_t ctrl_set_tpl_strength(aom_codec_alg_priv_t *ctx,
+static aom_codec_err_t ctrl_set_delta_qindex_mult(aom_codec_alg_priv_t *ctx,
                                           va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
-  extra_cfg.tpl_strength = CAST(AOME_SET_TPL_STRENGTH, args);
+  extra_cfg.delta_qindex_mult = CAST(AOME_SET_DELTA_QINDEX_MULT, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
-static aom_codec_err_t ctrl_set_tpl_strength_pos(aom_codec_alg_priv_t *ctx,
+static aom_codec_err_t ctrl_set_delta_qindex_mult_pos(aom_codec_alg_priv_t *ctx,
                                           va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
-  extra_cfg.tpl_strength_pos = CAST(AOME_SET_TPL_STRENGTH_POS, args);
+  extra_cfg.delta_qindex_mult_pos = CAST(AOME_SET_DELTA_QINDEX_MULT_POS, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
-static aom_codec_err_t ctrl_set_tpl_strength_neg(aom_codec_alg_priv_t *ctx,
+static aom_codec_err_t ctrl_set_delta_qindex_mult_neg(aom_codec_alg_priv_t *ctx,
                                           va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
-  extra_cfg.tpl_strength_neg = CAST(AOME_SET_TPL_STRENGTH_NEG, args);
+  extra_cfg.delta_qindex_mult_neg = CAST(AOME_SET_DELTA_QINDEX_MULT_NEG, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -4283,9 +4283,9 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV1E_SET_AUTO_INTRA_TOOLS_OFF, ctrl_set_auto_intra_tools_off },
   { AV1E_SET_RTC_EXTERNAL_RC, ctrl_set_rtc_external_rc },
   { AOME_SET_DQ_MODULATE, ctrl_set_dq_modulate },
-  { AOME_SET_TPL_STRENGTH, ctrl_set_tpl_strength },
-  { AOME_SET_TPL_STRENGTH_POS, ctrl_set_tpl_strength_pos },
-  { AOME_SET_TPL_STRENGTH_NEG, ctrl_set_tpl_strength_neg },
+  { AOME_SET_DELTA_QINDEX_MULT, ctrl_set_delta_qindex_mult },
+  { AOME_SET_DELTA_QINDEX_MULT_POS, ctrl_set_delta_qindex_mult_pos },
+  { AOME_SET_DELTA_QINDEX_MULT_NEG, ctrl_set_delta_qindex_mult_neg },
   { AOME_SET_VMAF_MOTION_MULT, ctrl_set_vmaf_motion_mult },
   { AOME_SET_SSIM_RD_MULT, ctrl_set_ssim_rd_mult },
   { AOME_SET_LUMA_BIAS, ctrl_set_luma_bias },

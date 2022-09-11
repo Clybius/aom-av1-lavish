@@ -1068,11 +1068,11 @@ typedef struct AV1EncoderConfig {
   // ClybPatch -- Add a modifiable parameter for modifying deltaq-mode=1's perceptual modulation via the interface
   int dq_modulate;
   // ClybPatch -- Add a modifiable parameter for modifying enable-tpl-model's effectiveness via the interface (Very WIP)
-  int tpl_strength;
+  int delta_qindex_mult;
   // ClybPatch -- Add modifiable parameters for modifying the TPL model's upwards or downwards quantization (Very WIP, advanced)
-  int tpl_strength_pos;
+  int delta_qindex_mult_pos;
 
-  int tpl_strength_neg;
+  int delta_qindex_mult_neg;
 
   int vmaf_motion_mult;
 

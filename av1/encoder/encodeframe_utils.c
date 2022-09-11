@@ -59,12 +59,16 @@ static AOM_INLINE int set_deltaq_rdmult(const AV1_COMP *const cpi,
                                         const MACROBLOCK *const x) {
   const AV1_COMMON *const cm = &cpi->common;
   const CommonQuantParams *quant_params = &cm->quant_params;
-  if (x->delta_qindex > 0) {
-    return av1_compute_rd_mult(cpi, quant_params->base_qindex + (int)round(x->delta_qindex * cpi->oxcf.tpl_strength_pos / 100.0 * cpi->oxcf.tpl_strength / 100.0) +
-                                      quant_params->y_dc_delta_q);
-  } else if (x->delta_qindex < 0) return av1_compute_rd_mult(cpi, quant_params->base_qindex + (int)round(x->delta_qindex * cpi->oxcf.tpl_strength_neg / 100.0 * cpi->oxcf.tpl_strength / 100.0) +
-                                      quant_params->y_dc_delta_q);
-  else return av1_compute_rd_mult(cpi, quant_params->base_qindex + (int)round(x->delta_qindex * cpi->oxcf.tpl_strength / 100.0) +
+  int deltaq_multiplier = 100;
+  if ((cpi->oxcf.delta_qindex_mult_pos >= 0) && (x->delta_qindex > 0)) {
+    deltaq_multiplier = cpi->oxcf.delta_qindex_mult_pos;
+  } else if ((cpi->oxcf.delta_qindex_mult_neg >= 0) && (x->delta_qindex < 0)) {
+    deltaq_multiplier = cpi->oxcf.delta_qindex_mult_neg;
+  } else {
+    deltaq_multiplier = cpi->oxcf.delta_qindex_mult;
+  }
+
+  return av1_compute_rd_mult(cpi, quant_params->base_qindex + (int)round(x->delta_qindex * deltaq_multiplier / 100.0) +
                                       quant_params->y_dc_delta_q);
 }
 

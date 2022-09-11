@@ -691,16 +691,16 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .dq_modulate = ARG_DEF(NULL, "dq-modulate", 1,
                        "Changes deltaq-mode=2's perceptual modulation. Still WIP. "
                        "(0..1), default is 1 (wavelet)"),
-  .tpl_strength = ARG_DEF(NULL, "tpl-strength", 1,
-                       "Sets the effectiveness of the TPL model. Still WIP. "
-                       "(0..1000), default is 100 (stock aomenc behavior.) "
-                       "Acts as a multiplier for -pos and -neg values. "),
-  .tpl_strength_pos = ARG_DEF(NULL, "tpl-strength-pos", 1,
+  .delta_qindex_mult = ARG_DEF(NULL, "delta-qindex-mult", 1,
+                       "Sets the effectiveness of the TPL model. Still WIP.\n "
+                       "                                        (0..1000), default is 100 (stock aomenc behavior.)\n "
+                       "                                        Acts as a multiplier for the change in quantization due to deltaq. "),
+  .delta_qindex_mult_pos = ARG_DEF(NULL, "delta-qindex-pos", 1,
                        "Multiplier for positive deltaq quantization "
-                                  "(Advanced users only, defaults to 100)"),
-  .tpl_strength_neg = ARG_DEF(NULL, "tpl-strength-neg", 1,
+                                  "(Advanced control, defaults to -1 (Disabled))"),
+  .delta_qindex_mult_neg = ARG_DEF(NULL, "delta-qindex-neg", 1,
                        "Multiplier for negative deltaq quantization "
-                                  "(Advanced users only, defaults to 100)"),
+                                  "(Advanced control, defaults to -1 (Disabled))"),
   .vmaf_motion_mult = ARG_DEF(NULL, "vmaf-motion-mult", 1,
                        "Multiplier for vmaf qindex "
                                   "(Advanced users only, only active with vmaf tunes, defaults to 100)"),

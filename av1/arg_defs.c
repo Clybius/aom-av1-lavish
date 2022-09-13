@@ -710,7 +710,9 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .luma_bias = ARG_DEF(NULL, "luma-bias", 1,
                        "Force apply luma bias "
                                   "(Recommended to leave default (1))"),
-  .chroma_q_offset = ARG_DEF(NULL, "chroma-q-offset", 1, // av1_tpl_rdmult_setup_sb
-                       "Override automatic chroma Q offset with the provided argument"),
+  .chroma_q_offset_u = ARG_DEF(NULL, "chroma-q-offset-u", 1,
+                       "Adjust the automatic chroma Q offset for the u plane"),
+  .chroma_q_offset_v = ARG_DEF(NULL, "chroma-q-offset-v", 1,
+                       "Adjust the automatic chroma Q offset for the v plane"),
 #endif  // CONFIG_AV1_ENCODER
 };

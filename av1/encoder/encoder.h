@@ -788,6 +788,10 @@ typedef struct {
   bool enable_hdr_deltaq;
   // Indicates if encoding with quantization matrices should be enabled.
   bool using_qm;
+  // ClybPatch -- Chroma Q Offset for U & V
+  int chroma_q_offset_u;
+
+  int chroma_q_offset_v;
 } QuantizationCfg;
 
 /*!\endcond */
@@ -1080,7 +1084,6 @@ typedef struct AV1EncoderConfig {
 
   int luma_bias;
 
-  int chroma_q_offset;
   /*!\endcond */
 } AV1EncoderConfig;
 

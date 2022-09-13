@@ -1478,8 +1478,10 @@ enum aome_enc_control_id {
   // Clybpatch -- Add force enable luma bias, even when not using Variance AQ.
   AOME_SET_LUMA_BIAS = AOME_SET_DELTA_QINDEX_MULT + 5,
 
-  // ClybPatch -- rdmult multiplier for the temporal layer
-  AOME_SET_CHROMA_Q_OFFSET = AOME_SET_DELTA_QINDEX_MULT + 6,
+  // ClybPatch -- Chroma Q offset
+  AV1E_SET_CHROMA_Q_OFFSET_U = AOME_SET_DELTA_QINDEX_MULT + 6,
+
+  AV1E_SET_CHROMA_Q_OFFSET_V = AOME_SET_DELTA_QINDEX_MULT + 7,
   /*!\brief Codec control function to get the number of operating points. int*
    * parameter.
    */
@@ -2128,8 +2130,11 @@ AOM_CTRL_USE_TYPE(AOME_SET_SSIM_RD_MULT, int)
 AOM_CTRL_USE_TYPE(AOME_SET_LUMA_BIAS, int)
 #define AOM_CTRL_AOME_SET_LUMA_BIAS
 
-AOM_CTRL_USE_TYPE(AOME_SET_CHROMA_Q_OFFSET, int)
-#define AOM_CTRL_AOME_SET_CHROMA_Q_OFFSET
+AOM_CTRL_USE_TYPE(AV1E_SET_CHROMA_Q_OFFSET_U, int)
+#define AOM_CTRL_AV1E_SET_CHROMA_Q_OFFSET_U
+
+AOM_CTRL_USE_TYPE(AV1E_SET_CHROMA_Q_OFFSET_V, int)
+#define AOM_CTRL_AOME_SET_CHROMA_Q_OFFSET_V
 
 AOM_CTRL_USE_TYPE(AV1E_GET_NUM_OPERATING_POINTS, int *)
 #define AOM_CTRL_AV1E_GET_NUM_OPERATING_POINTS

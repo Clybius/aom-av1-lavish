@@ -245,7 +245,8 @@ static const int av1_arg_ctrl_map[] = { AOME_SET_CPUUSED,
                                         AOME_SET_VMAF_MOTION_MULT,
                                         AOME_SET_SSIM_RD_MULT,
                                         AOME_SET_LUMA_BIAS,
-                                        AOME_SET_CHROMA_Q_OFFSET,
+                                        AV1E_SET_CHROMA_Q_OFFSET_U,
+                                        AV1E_SET_CHROMA_Q_OFFSET_V,
                                         0 };
 
 const arg_def_t *main_args[] = { &g_av1_codec_arg_defs.help,
@@ -458,7 +459,8 @@ const arg_def_t *av1_ctrl_args[] = {
   &g_av1_codec_arg_defs.vmaf_motion_mult,
   &g_av1_codec_arg_defs.ssim_rd_mult,
   &g_av1_codec_arg_defs.luma_bias,
-  &g_av1_codec_arg_defs.chroma_q_offset,
+  &g_av1_codec_arg_defs.chroma_q_offset_u,
+  &g_av1_codec_arg_defs.chroma_q_offset_v,
   NULL,
 };
 

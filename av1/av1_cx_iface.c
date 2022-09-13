@@ -78,6 +78,8 @@ struct av1_extracfg {
   unsigned int frame_parallel_decoding_mode;
   int enable_dual_filter;
   unsigned int enable_chroma_deltaq;
+  int chroma_q_offset_u;
+  int chroma_q_offset_v;
   AQ_MODE aq_mode;
   DELTAQ_MODE deltaq_mode;
   int deltaq_strength;
@@ -197,7 +199,6 @@ struct av1_extracfg {
   int vmaf_motion_mult;
   int ssim_rd_mult;
   int luma_bias;
-  int chroma_q_offset;
 };
 
 #if CONFIG_REALTIME_ONLY
@@ -260,6 +261,8 @@ static const struct av1_extracfg default_extra_cfg = {
   0,                            // frame_parallel_decoding_mode
   1,                            // enable dual filter
   0,                            // enable delta quant in chroma planes
+  0,                            // chroma q offset u
+  0,                            // chroma q offset v
   NO_AQ,                        // aq_mode
   NO_DELTA_Q,                   // deltaq_mode
   100,                          // deltaq_strength
@@ -367,7 +370,6 @@ static const struct av1_extracfg default_extra_cfg = {
   100,             // vmaf_motion_mult
   100,             // ssim_rd_mult
   1,               // luma_bias
-  0,               // chroma_q_offset
 };
 #else
 static const struct av1_extracfg default_extra_cfg = {
@@ -416,6 +418,8 @@ static const struct av1_extracfg default_extra_cfg = {
   0,                            // frame_parallel_decoding_mode
   1,                            // enable dual filter
   1,                            // enable delta quant in chroma planes
+  0,                            // chroma_q_offset_u
+  0,                            // chroma_q_offset_v
   NO_AQ,                        // aq_mode
   DELTA_Q_OBJECTIVE,            // deltaq_mode
   100,                          // deltaq_strength
@@ -523,7 +527,6 @@ static const struct av1_extracfg default_extra_cfg = {
   100,             // vmaf_motion_mult
   100,             // ssim_rd_mult
   1,               // luma_bias
-  0,               // chroma_q_offset
 };
 #endif
 
@@ -843,6 +846,10 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
       ERROR("Only --aq_mode=0 can be used with --lossless=1.");
     if (extra_cfg->enable_chroma_deltaq)
       ERROR("Only --enable_chroma_deltaq=0 can be used with --lossless=1.");
+    if (extra_cfg->chroma_q_offset_u)
+      ERROR("Only --chroma_q_offset_u=0 can be used with --lossless=1.");
+    if (extra_cfg->chroma_q_offset_v)
+      ERROR("Only --chroma_q_offset_v=0 can be used with --lossless=1.");
   }
 
   RANGE_CHECK(extra_cfg, max_reference_frames, 3, 7);
@@ -887,7 +894,8 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   RANGE_CHECK(extra_cfg, vmaf_motion_mult, 1, 1000);
   RANGE_CHECK(extra_cfg, ssim_rd_mult, 1, 1000);
   RANGE_CHECK_BOOL(extra_cfg, luma_bias);
-  RANGE_CHECK(extra_cfg, chroma_q_offset, -63, 63);
+  RANGE_CHECK(extra_cfg, chroma_q_offset_u, -63, 63);
+  RANGE_CHECK(extra_cfg, chroma_q_offset_v, -63, 63);
 
   return AOM_CODEC_OK;
 }
@@ -1188,6 +1196,9 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   q_cfg->qm_maxlevel = extra_cfg->qm_max;
   q_cfg->quant_b_adapt = extra_cfg->quant_b_adapt;
   q_cfg->enable_chroma_deltaq = extra_cfg->enable_chroma_deltaq;
+  q_cfg->chroma_q_offset_u = extra_cfg->chroma_q_offset_u;
+  q_cfg->chroma_q_offset_v = extra_cfg->chroma_q_offset_v;
+
   q_cfg->aq_mode = extra_cfg->aq_mode;
   q_cfg->deltaq_mode = extra_cfg->deltaq_mode;
   q_cfg->deltaq_strength = extra_cfg->deltaq_strength;
@@ -1482,8 +1493,6 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   oxcf->ssim_rd_mult = extra_cfg->ssim_rd_mult;
 
   oxcf->luma_bias = extra_cfg->luma_bias;
-
-  oxcf->chroma_q_offset = extra_cfg->chroma_q_offset;
 
   return AOM_CODEC_OK;
 }
@@ -4027,9 +4036,12 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.luma_bias,
                               argv, err_string)) {
     extra_cfg.luma_bias = arg_parse_int_helper(&arg, err_string);
-  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.chroma_q_offset,
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.chroma_q_offset_u,
                               argv, err_string)) {
-    extra_cfg.chroma_q_offset = arg_parse_int_helper(&arg, err_string);
+    extra_cfg.chroma_q_offset_u = arg_parse_int_helper(&arg, err_string);
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.chroma_q_offset_v,
+                              argv, err_string)) {
+    extra_cfg.chroma_q_offset_v = arg_parse_int_helper(&arg, err_string);
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tile_width, argv,
                               err_string)) {
     ctx->cfg.tile_width_count = arg_parse_list_helper(
@@ -4128,10 +4140,17 @@ static aom_codec_err_t ctrl_set_luma_bias(aom_codec_alg_priv_t *ctx,
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
-static aom_codec_err_t ctrl_set_chroma_q_offset(aom_codec_alg_priv_t *ctx,
+static aom_codec_err_t ctrl_set_chroma_q_offset_u(aom_codec_alg_priv_t *ctx,
                                           va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
-  extra_cfg.chroma_q_offset = CAST(AOME_SET_CHROMA_Q_OFFSET, args);
+  extra_cfg.chroma_q_offset_u = CAST(AV1E_SET_CHROMA_Q_OFFSET_U, args);
+  return update_extra_cfg(ctx, &extra_cfg);
+}
+
+static aom_codec_err_t ctrl_set_chroma_q_offset_v(aom_codec_alg_priv_t *ctx,
+                                          va_list args) {
+  struct av1_extracfg extra_cfg = ctx->extra_cfg;
+  extra_cfg.chroma_q_offset_v = CAST(AV1E_SET_CHROMA_Q_OFFSET_V, args);
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -4198,6 +4217,8 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV1E_SET_MAX_PARTITION_SIZE, ctrl_set_max_partition_size },
   { AV1E_SET_ENABLE_DUAL_FILTER, ctrl_set_enable_dual_filter },
   { AV1E_SET_ENABLE_CHROMA_DELTAQ, ctrl_set_enable_chroma_deltaq },
+  { AV1E_SET_CHROMA_Q_OFFSET_U, ctrl_set_chroma_q_offset_u },
+  { AV1E_SET_CHROMA_Q_OFFSET_V, ctrl_set_chroma_q_offset_v },
   { AV1E_SET_ENABLE_INTRA_EDGE_FILTER, ctrl_set_enable_intra_edge_filter },
   { AV1E_SET_ENABLE_ORDER_HINT, ctrl_set_enable_order_hint },
   { AV1E_SET_ENABLE_TX64, ctrl_set_enable_tx64 },
@@ -4289,7 +4310,6 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AOME_SET_VMAF_MOTION_MULT, ctrl_set_vmaf_motion_mult },
   { AOME_SET_SSIM_RD_MULT, ctrl_set_ssim_rd_mult },
   { AOME_SET_LUMA_BIAS, ctrl_set_luma_bias },
-  { AOME_SET_CHROMA_Q_OFFSET, ctrl_set_chroma_q_offset },
 
   // Getters
   { AOME_GET_LAST_QUANTIZER, ctrl_get_quantizer },

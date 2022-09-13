@@ -847,10 +847,10 @@ void av1_set_quantizer(AV1_COMP *const cpi, int min_qmlevel, int max_qmlevel,
     }
   }
 
-  quant_params->u_dc_delta_q += adjustment + chroma_q_offset_u;
-  quant_params->u_ac_delta_q += adjustment + chroma_q_offset_u;
-  quant_params->v_dc_delta_q += adjustment + chroma_q_offset_v;
-  quant_params->v_ac_delta_q += adjustment + chroma_q_offset_v;
+  quant_params->u_dc_delta_q = adjustment + chroma_q_offset_u;
+  quant_params->u_ac_delta_q = adjustment + chroma_q_offset_u;
+  quant_params->v_dc_delta_q = adjustment + chroma_q_offset_v;
+  quant_params->v_ac_delta_q = adjustment + chroma_q_offset_v;
 
   quant_params->qmatrix_level_y =
       aom_get_qmlevel(quant_params->base_qindex, min_qmlevel, max_qmlevel);

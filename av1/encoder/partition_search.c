@@ -583,18 +583,18 @@ static void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
                                int mi_row, int mi_col, BLOCK_SIZE bsize,
                                AQ_MODE aq_mode, MB_MODE_INFO *mbmi) {
   x->rdmult = cpi->rd.RDMULT;
-
+  int applied_luma_bias = 0;
   if (aq_mode != NO_AQ) {
     assert(mbmi != NULL);
-    if (aq_mode == VARIANCE_AQ) {
+    if (aq_mode == VARIANCE_AQ || (cpi->oxcf.dq_modulate == 0 && cpi->oxcf.q_cfg.deltaq_mode == DELTA_Q_PERCEPTUAL)) {
       if (cpi->vaq_refresh) {
         int energy = bsize <= BLOCK_16X16 ? x->mb_energy
                                           : av1_log_block_var(cpi, x, bsize);
 
         // Only active low luma biaised variance AQ if any of the psy tunes
         // are on for now
-        if ((cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY) ||
-            (cpi->oxcf.tune_cfg.content == AOM_CONTENT_ANIMATION)) {
+        if ((cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY ||
+            cpi->oxcf.tune_cfg.content == AOM_CONTENT_ANIMATION) && (cpi->oxcf.luma_bias == 1)) {
           // We want to allocate more bits to this block if it is dark.
           // We will shift the segment by a maximum of +2
           BitDepthInfo bd_info = get_bit_depth_info(&x->e_mbd);
@@ -637,6 +637,7 @@ static void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
           } else {
             energy = energy + adjustment;
           }
+        applied_luma_bias = 1;
         }
 
 
@@ -650,6 +651,53 @@ static void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
       if (cyclic_refresh_segment_id_boosted(mbmi->segment_id))
         x->rdmult = av1_cyclic_refresh_get_rdmult(cpi->cyclic_refresh);
     }
+  }
+
+  if (cpi->oxcf.luma_bias == 1 && applied_luma_bias == 0) { // Pure instance of luma bias, TODO: may want to turn its effects into a function later
+    int energy = bsize <= BLOCK_16X16 ? x->mb_energy
+                                        : av1_log_block_var(cpi, x, bsize);
+    BitDepthInfo bd_info = get_bit_depth_info(&x->e_mbd);
+    int avg_brightness;
+    if (bd_info.use_highbitdepth_buf) {
+      avg_brightness =
+          av1_log_block_avg_hbd(x, bsize) >> (bd_info.bit_depth - 8);
+    } else {
+      avg_brightness = av1_log_block_avg(x, bsize);
+    }
+    int adjustment = 0;
+    // These breakpoints were chosen semi-arbitrarily after some testing,
+    // and assuming a Limited color range.
+    if (avg_brightness < 45) {
+      adjustment = -2;
+    } else if (avg_brightness < 70) {
+      adjustment = -1;
+    } else if (avg_brightness > 195) {
+      adjustment = 1;
+    }
+
+    //Optimizations for HDR content
+    if(cpi->oxcf.q_cfg.enable_hdr_deltaq){
+      if (avg_brightness < 45) {
+        adjustment = -3;
+      } else if (avg_brightness < 70) {
+        adjustment = -2;
+      } else if (avg_brightness < 127) {
+        adjustment = -1;
+      } else if (avg_brightness > 195) {
+        adjustment = 0;
+      }
+    }
+
+    if (energy + adjustment < 0) {
+      energy = 0;
+    } else if (energy + adjustment > 7) {
+      energy = 7;
+    } else {
+      energy = energy + adjustment;
+    }
+
+    x->rdmult = set_segment_rdmult(cpi, x, energy);
+    applied_luma_bias = 1;
   }
 
 #if !CONFIG_REALTIME_ONLY
@@ -2274,46 +2322,6 @@ static void encode_b_nonrd(const AV1_COMP *const cpi, TileDataEnc *tile_data,
                            cm->seq_params->sb_size, bsize, mi_row, mi_col);
 }
 
-static int get_force_zeromv_skip_flag_for_blk(const AV1_COMP *cpi,
-                                              const MACROBLOCK *x,
-                                              BLOCK_SIZE bsize) {
-  // Force zero MV skip based on SB level decision
-  if (x->force_zeromv_skip_for_sb < 2) return x->force_zeromv_skip_for_sb;
-
-  // For blocks of size equal to superblock size, the decision would have been
-  // already done at superblock level. Hence zeromv-skip decision is skipped.
-  const AV1_COMMON *const cm = &cpi->common;
-  if (bsize == cm->seq_params->sb_size) return 0;
-
-  const int num_planes = av1_num_planes(cm);
-  const MACROBLOCKD *const xd = &x->e_mbd;
-  const unsigned int thresh_exit_part_y =
-      cpi->zeromv_skip_thresh_exit_part[bsize];
-  const unsigned int thresh_exit_part_uv =
-      CALC_CHROMA_THRESH_FOR_ZEROMV_SKIP(thresh_exit_part_y);
-  const unsigned int thresh_exit_part[MAX_MB_PLANE] = { thresh_exit_part_y,
-                                                        thresh_exit_part_uv,
-                                                        thresh_exit_part_uv };
-  const YV12_BUFFER_CONFIG *const yv12 = get_ref_frame_yv12_buf(cm, LAST_FRAME);
-  const struct scale_factors *const sf =
-      get_ref_scale_factors_const(cm, LAST_FRAME);
-
-  struct buf_2d yv12_mb[MAX_MB_PLANE];
-  av1_setup_pred_block(xd, yv12_mb, yv12, sf, sf, num_planes);
-
-  for (int plane = 0; plane < num_planes; ++plane) {
-    const struct macroblock_plane *const p = &x->plane[plane];
-    const struct macroblockd_plane *const pd = &xd->plane[plane];
-    const BLOCK_SIZE bs =
-        get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
-    const unsigned int plane_sad = cpi->ppi->fn_ptr[bs].sdf(
-        p->src.buf, p->src.stride, yv12_mb[plane].buf, yv12_mb[plane].stride);
-    assert(plane < MAX_MB_PLANE);
-    if (plane_sad >= thresh_exit_part[plane]) return 0;
-  }
-  return 1;
-}
-
 /*!\brief Top level function to pick block mode for non-RD optimized case
  *
  * \ingroup partition_search
@@ -2382,11 +2390,7 @@ static void pick_sb_modes_nonrd(AV1_COMP *const cpi, TileDataEnc *tile_data,
     p[i].txb_entropy_ctx = ctx->txb_entropy_ctx[i];
   }
   for (i = 0; i < 2; ++i) pd[i].color_index_map = ctx->color_index_map[i];
-
-  x->force_zeromv_skip_for_blk =
-      get_force_zeromv_skip_flag_for_blk(cpi, x, bsize);
-
-  if (!x->force_zeromv_skip_for_blk) {
+  if (!x->force_zeromv_skip) {
     x->source_variance = av1_get_perpixel_variance_facade(
         cpi, xd, &x->plane[0].src, bsize, AOM_PLANE_Y);
   }
@@ -2648,7 +2652,15 @@ static void direct_partition_merging(AV1_COMP *cpi, ThreadData *td,
     // Update mi for this partition block.
     for (int y = 0; y < bs; y++) {
       for (int x_idx = 0; x_idx < bs; x_idx++) {
-        this_mi[x_idx + y * mi_params->mi_stride] = this_mi[0];
+        this_mi[x_idx + y * mi_params->mi_stride]->bsize = this_mi[0]->bsize;
+        this_mi[x_idx + y * mi_params->mi_stride]->partition =
+            this_mi[0]->partition;
+        this_mi[x_idx + y * mi_params->mi_stride]->skip_txfm =
+            this_mi[0]->skip_txfm;
+        this_mi[x_idx + y * mi_params->mi_stride]->tx_size =
+            this_mi[0]->tx_size;
+        memcpy(this_mi[x_idx + y * mi_params->mi_stride]->inter_tx_size,
+               this_mi[0]->inter_tx_size, sizeof(this_mi[0]->inter_tx_size));
       }
     }
   }

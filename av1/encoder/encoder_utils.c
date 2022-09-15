@@ -636,6 +636,7 @@ void av1_update_film_grain_parameters_seq(struct AV1_PRIMARY *ppi,
 void av1_update_film_grain_parameters(struct AV1_COMP *cpi,
                                       const AV1EncoderConfig *oxcf) {
   AV1_COMMON *const cm = &cpi->common;
+  cpi->oxcf = *oxcf;
   const TuneCfg *const tune_cfg = &oxcf->tune_cfg;
 
   if (cpi->film_grain_table) {
@@ -776,7 +777,7 @@ BLOCK_SIZE av1_select_sb_size(const AV1EncoderConfig *const oxcf, int width,
     return BLOCK_128X128;
   }
   //Sketchy code to check whether or not a video/image is small enough to only use 64x64 SBs without downsides
-  int is_4k_or_smaller = (width * height) < (2500*2000);
+  int is_4k_or_smaller = (width * height) < (2700 * 2160);
 
   //Force 64x64 superblock size to improve psycho-visual quality in video content
   //but keep it only on for higher quality levels
@@ -1060,7 +1061,7 @@ void av1_determine_sc_tools_with_encoding(AV1_COMP *cpi, const int q_orig) {
     set_encoding_params_for_screen_content(cpi, pass);
     av1_set_quantizer(cpi, q_cfg->qm_minlevel, q_cfg->qm_maxlevel,
                       q_for_screen_content_quick_run,
-                      q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq);
+                      q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq, q_cfg->chroma_q_offset_u, q_cfg->chroma_q_offset_v);
     av1_set_speed_features_qindex_dependent(cpi, oxcf->speed);
     if (q_cfg->deltaq_mode != NO_DELTA_Q || q_cfg->enable_chroma_deltaq)
       av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,

@@ -1106,7 +1106,8 @@ static void filter_frame_on_unit(const RestorationTileLimits *limits,
 void av1_loop_restoration_filter_frame_init(AV1LrStruct *lr_ctxt,
                                             YV12_BUFFER_CONFIG *frame,
                                             AV1_COMMON *cm, int optimized_lr,
-                                            int num_planes) {
+                                            int num_planes,
+                                            int do_extend_border_mt) {
   const SequenceHeader *const seq_params = cm->seq_params;
   const int bit_depth = seq_params->bit_depth;
   const int highbd = seq_params->use_highbitdepth;
@@ -1123,6 +1124,7 @@ void av1_loop_restoration_filter_frame_init(AV1LrStruct *lr_ctxt,
 
   lr_ctxt->on_rest_unit = filter_frame_on_unit;
   lr_ctxt->frame = frame;
+  lr_ctxt->cm = cm;
   for (int plane = 0; plane < num_planes; ++plane) {
     RestorationInfo *rsi = &cm->rst_info[plane];
     RestorationType rtype = rsi->frame_restoration_type;
@@ -1136,6 +1138,7 @@ void av1_loop_restoration_filter_frame_init(AV1LrStruct *lr_ctxt,
     const int plane_width = frame->crop_widths[is_uv];
     const int plane_height = frame->crop_heights[is_uv];
     FilterFrameCtxt *lr_plane_ctxt = &lr_ctxt->ctxt[plane];
+    cm->extend_border_mt[plane] = do_extend_border_mt;
 
     av1_extend_frame(frame->buffers[plane], plane_width, plane_height,
                      frame->strides[is_uv], RESTORATION_BORDER,
@@ -1196,7 +1199,8 @@ void av1_loop_restoration_filter_frame(YV12_BUFFER_CONFIG *frame,
   AV1LrStruct *loop_rest_ctxt = (AV1LrStruct *)lr_ctxt;
 
   av1_loop_restoration_filter_frame_init(loop_rest_ctxt, frame, cm,
-                                         optimized_lr, num_planes);
+                                         optimized_lr, num_planes,
+                                         /* do_extend_border_mt */ 0);
 
   foreach_rest_unit_in_planes(loop_rest_ctxt, cm, num_planes);
 

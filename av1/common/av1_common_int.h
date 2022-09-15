@@ -1048,6 +1048,12 @@ typedef struct AV1Common {
    */
   int spatial_layer_id;
 
+  /*!
+   * Extension of frame borders is multi-threaded along with cdef/loop
+   * restoration.
+   */
+  int extend_border_mt[MAX_MB_PLANE];
+
 #if TXCOEFF_TIMER
   int64_t cum_txcoeff_timer;
   int64_t txcoeff_timer;
@@ -1871,9 +1877,7 @@ static INLINE int is_valid_seq_level_idx(AV1_LEVEL seq_level_idx) {
           // The following levels are currently undefined.
           seq_level_idx != SEQ_LEVEL_2_2 && seq_level_idx != SEQ_LEVEL_2_3 &&
           seq_level_idx != SEQ_LEVEL_3_2 && seq_level_idx != SEQ_LEVEL_3_3 &&
-          seq_level_idx != SEQ_LEVEL_4_2 && seq_level_idx != SEQ_LEVEL_4_3 &&
-          seq_level_idx != SEQ_LEVEL_7_0 && seq_level_idx != SEQ_LEVEL_7_1 &&
-          seq_level_idx != SEQ_LEVEL_7_2 && seq_level_idx != SEQ_LEVEL_7_3);
+          seq_level_idx != SEQ_LEVEL_4_2 && seq_level_idx != SEQ_LEVEL_4_3);
 }
 
 /*!\endcond */

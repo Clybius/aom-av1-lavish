@@ -1279,9 +1279,9 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   add_proto qw/unsigned int aom_mse8x8/, "const uint8_t *src_ptr, int  source_stride, const uint8_t *ref_ptr, int  recon_stride, unsigned int *sse";
 
   specialize qw/aom_mse16x16          sse2 avx2 neon msa/;
-  specialize qw/aom_mse16x8           sse2      neon msa/;
-  specialize qw/aom_mse8x16           sse2      neon msa/;
-  specialize qw/aom_mse8x8            sse2      neon msa/;
+  specialize qw/aom_mse16x8           sse2           msa/;
+  specialize qw/aom_mse8x16           sse2           msa/;
+  specialize qw/aom_mse8x8            sse2           msa/;
 
   if (aom_config("CONFIG_AV1_HIGHBITDEPTH") eq "yes") {
     foreach $bd (8, 10, 12) {

@@ -449,9 +449,7 @@ static AOM_INLINE void tune_thresh_based_on_qindex_window(
 static AOM_INLINE void set_vbp_thresholds(AV1_COMP *cpi, int64_t thresholds[],
                                           int q, int content_lowsumdiff,
                                           int source_sad_nonrd,
-                                          int source_sad_rd, int segment_id,
-                                          uint64_t blk_sad,
-                                          int lighting_change) {
+                                          int source_sad_rd, int segment_id) {
   AV1_COMMON *const cm = &cpi->common;
   const int is_key_frame = frame_is_intra_only(cm);
   const int threshold_multiplier = is_key_frame ? 120 : 1;
@@ -594,15 +592,6 @@ static AOM_INLINE void set_vbp_thresholds(AV1_COMP *cpi, int64_t thresholds[],
       } else {
         thresholds[1] <<= 1;
         thresholds[2] <<= 3;
-      }
-      // Allow for split to 8x8 for superblocks where part of it has
-      // moving boudary. So allow for sb with source_sad above threshold,
-      // and avoid very large source_sad or high source content, to avoid
-      // too many 8x8 within superblock.
-      if (segment_id == 0 && cpi->rc.avg_source_sad < 25000 &&
-          blk_sad > 25000 && blk_sad < 50000 && !lighting_change) {
-        thresholds[2] = (3 * thresholds[2]) >> 2;
-        thresholds[3] = thresholds[2] << 3;
       }
       // Condition the increase of partition thresholds on the segment
       // and the content. Avoid the increase for superblocks which have
@@ -927,7 +916,7 @@ void av1_set_variance_partition_thresholds(AV1_COMP *cpi, int q,
     return;
   } else {
     set_vbp_thresholds(cpi, cpi->vbp_info.thresholds, q, content_lowsumdiff, 0,
-                       0, 0, 0, 0);
+                       0, 0);
     // The threshold below is not changed locally.
     cpi->vbp_info.threshold_minmax = 15 + (q >> 3);
   }
@@ -1290,17 +1279,6 @@ int av1_choose_var_based_partitioning(AV1_COMP *cpi, const TileInfo *const tile,
   const int low_res = (cm->width <= 352 && cm->height <= 288);
   int variance4x4downsample[64];
   const int segment_id = xd->mi[0]->segment_id;
-  uint64_t blk_sad = 0;
-  if (cpi->src_sad_blk_64x64 != NULL) {
-    const int sb_size_by_mb = (cm->seq_params->sb_size == BLOCK_128X128)
-                                  ? (cm->seq_params->mib_size >> 1)
-                                  : cm->seq_params->mib_size;
-    const int sb_cols =
-        (cm->mi_params.mi_cols + sb_size_by_mb - 1) / sb_size_by_mb;
-    const int sbi_col = mi_col / sb_size_by_mb;
-    const int sbi_row = mi_row / sb_size_by_mb;
-    blk_sad = cpi->src_sad_blk_64x64[sbi_col + sbi_row * sb_cols];
-  }
 
   if (cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ && cm->seg.enabled &&
       cyclic_refresh_segment_id_boosted(segment_id)) {
@@ -1308,14 +1286,12 @@ int av1_choose_var_based_partitioning(AV1_COMP *cpi, const TileInfo *const tile,
         av1_get_qindex(&cm->seg, segment_id, cm->quant_params.base_qindex);
     set_vbp_thresholds(cpi, thresholds, q, x->content_state_sb.low_sumdiff,
                        x->content_state_sb.source_sad_nonrd,
-                       x->content_state_sb.source_sad_rd, 1, blk_sad,
-                       x->content_state_sb.lighting_change);
+                       x->content_state_sb.source_sad_rd, 1);
   } else {
     set_vbp_thresholds(cpi, thresholds, cm->quant_params.base_qindex,
                        x->content_state_sb.low_sumdiff,
                        x->content_state_sb.source_sad_nonrd,
-                       x->content_state_sb.source_sad_rd, 0, blk_sad,
-                       x->content_state_sb.lighting_change);
+                       x->content_state_sb.source_sad_rd, 0);
   }
 
   // For non keyframes, disable 4x4 average for low resolution when speed = 8
@@ -1369,40 +1345,36 @@ int av1_choose_var_based_partitioning(AV1_COMP *cpi, const TileInfo *const tile,
   chroma_check(cpi, x, bsize, y_sad_last, y_sad_g, is_key_frame, zero_motion,
                uv_sad);
 
-  x->force_zeromv_skip_for_sb = 0;
+  x->force_zeromv_skip = 0;
   const bool is_set_force_zeromv_skip =
       is_set_force_zeromv_skip_based_on_src_sad(
           cpi->sf.rt_sf.set_zeromv_skip_based_on_source_sad,
           x->content_state_sb.source_sad_nonrd);
 
+  const unsigned int thresh_exit_part =
+      (cm->seq_params->sb_size == BLOCK_64X64) ? 5000 : 10000;
   // If the superblock is completely static (zero source sad) and
   // the y_sad (relative to LAST ref) is very small, take the sb_size partition
   // and exit, and force zeromv_last skip mode for nonrd_pickmode.
-  // Only do this on the base segment (so the QP-boosted segment, if applied,
-  // can still continue cleaning/ramping up the quality).
-  // Condition on color uv_sad is also added.
+  // Only do this when the cyclic refresh is applied, and only on the base
+  // segment (so the QP-boosted segment can still contnue cleaning/ramping
+  // up the quality). Condition on color uv_sad is also added.
   if (!is_key_frame && cpi->sf.rt_sf.part_early_exit_zeromv &&
-      cpi->rc.frames_since_key > 30 && segment_id == CR_SEGMENT_ID_BASE &&
-      is_set_force_zeromv_skip && ref_frame_partition == LAST_FRAME &&
-      xd->mi[0]->mv[0].as_int == 0) {
+      cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ &&
+      cpi->cyclic_refresh->apply_cyclic_refresh &&
+      segment_id == CR_SEGMENT_ID_BASE && is_set_force_zeromv_skip &&
+      ref_frame_partition == LAST_FRAME && xd->mi[0]->mv[0].as_int == 0 &&
+      y_sad < thresh_exit_part && uv_sad[0]<(3 * thresh_exit_part)>> 2 &&
+      uv_sad[1]<(3 * thresh_exit_part)>> 2) {
     const int block_width = mi_size_wide[cm->seq_params->sb_size];
     const int block_height = mi_size_high[cm->seq_params->sb_size];
-    const unsigned int thresh_exit_part_y =
-        cpi->zeromv_skip_thresh_exit_part[bsize];
-    const unsigned int thresh_exit_part_uv =
-        CALC_CHROMA_THRESH_FOR_ZEROMV_SKIP(thresh_exit_part_y);
     if (mi_col + block_width <= tile->mi_col_end &&
-        mi_row + block_height <= tile->mi_row_end &&
-        y_sad < thresh_exit_part_y && uv_sad[0] < thresh_exit_part_uv &&
-        uv_sad[1] < thresh_exit_part_uv) {
+        mi_row + block_height <= tile->mi_row_end) {
       set_block_size(cpi, mi_row, mi_col, bsize);
-      x->force_zeromv_skip_for_sb = 1;
+      x->force_zeromv_skip = 1;
       if (vt2) aom_free(vt2);
       if (vt) aom_free(vt);
       return 0;
-    } else if (x->content_state_sb.source_sad_nonrd == kZeroSad &&
-               cpi->sf.rt_sf.part_early_exit_zeromv >= 2) {
-      x->force_zeromv_skip_for_sb = 2;
     }
   }
 

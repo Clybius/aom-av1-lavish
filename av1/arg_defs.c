@@ -286,8 +286,8 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
                        "optimization of transform coefficients "
                        "(0..7), default is 0"),
   .quant_sharpness = ARG_DEF(NULL, "quant-sharpness", 1,
-                       "Changes quantization based on sharpness. Still WIP. "
-                       "(0..7), default is 0"),
+                       "Changes quantization based on sharpness. "
+                       "(-7..7), default is 0"),
   .static_thresh =
       ARG_DEF(NULL, "static-thresh", 1, "Motion detection threshold"),
   .auto_altref =
@@ -691,9 +691,28 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .dq_modulate = ARG_DEF(NULL, "dq-modulate", 1,
                        "Changes deltaq-mode=2's perceptual modulation. Still WIP. "
                        "(0..1), default is 1 (wavelet)"),
-  .tpl_strength = ARG_DEF(NULL, "tpl-strength", 1,
-                       "Sets the effectiveness of the TPL model. Still WIP. "
-                       "(0..1000), default is 100 (stock aomenc behavior.) "
-                       "Recommended values are between 50-150."),
+  .delta_qindex_mult = ARG_DEF(NULL, "delta-qindex-mult", 1,
+                       "Sets the effectiveness of the TPL model. Still WIP.\n "
+                       "                                        (0..1000), default is 100 (stock aomenc behavior.)\n "
+                       "                                        Acts as a multiplier for the change in quantization due to deltaq. "),
+  .delta_qindex_mult_pos = ARG_DEF(NULL, "delta-qindex-pos", 1,
+                       "Multiplier for positive deltaq quantization "
+                                  "(Advanced control, defaults to -1 (Disabled))"),
+  .delta_qindex_mult_neg = ARG_DEF(NULL, "delta-qindex-neg", 1,
+                       "Multiplier for negative deltaq quantization "
+                                  "(Advanced control, defaults to -1 (Disabled))"),
+  .vmaf_motion_mult = ARG_DEF(NULL, "vmaf-motion-mult", 1,
+                       "Multiplier for vmaf qindex "
+                                  "(Advanced users only, only active with vmaf tunes, defaults to 100)"),
+  .ssim_rd_mult = ARG_DEF(NULL, "ssim-rd-mult", 1,
+                       "Multiplier for SSIM rdmult "
+                                  "(Advanced users only, only active with ipq and ssim tunes, defaults to 100)"),
+  .luma_bias = ARG_DEF(NULL, "luma-bias", 1,
+                       "Force apply luma bias "
+                                  "(Recommended to leave default (1))"),
+  .chroma_q_offset_u = ARG_DEF(NULL, "chroma-q-offset-u", 1,
+                       "Adjust the automatic chroma Q offset for the u plane"),
+  .chroma_q_offset_v = ARG_DEF(NULL, "chroma-q-offset-v", 1,
+                       "Adjust the automatic chroma Q offset for the v plane"),
 #endif  // CONFIG_AV1_ENCODER
 };

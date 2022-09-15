@@ -232,6 +232,7 @@ class RateControlQModeTest : public ::testing::Test {
     rc_param_.min_gop_show_frame_count = 4;
     rc_param_.ref_frame_table_size = 7;
     rc_param_.max_ref_frames = 7;
+    rc_param_.max_depth = 5;
     rc_param_.base_q_index = 128;
     rc_param_.frame_height = kFrameHeight;
     rc_param_.frame_width = kFrameWidth;
@@ -925,6 +926,13 @@ TEST_F(RateControlQModeTest, TestInvalidMaxRefFrames) {
   EXPECT_EQ(status.code, AOM_CODEC_INVALID_PARAM);
   EXPECT_THAT(status.message,
               HasSubstr("max_ref_frames (8) must be in the range"));
+}
+
+TEST_F(RateControlQModeTest, TestInvalidMaxDepth) {
+  rc_param_.max_depth = 6;
+  Status status = AV1RateControlQMode().SetRcParam(rc_param_);
+  EXPECT_EQ(status.code, AOM_CODEC_INVALID_PARAM);
+  EXPECT_THAT(status.message, HasSubstr("max_depth (6) must be in the range"));
 }
 
 TEST_F(RateControlQModeTest, TestInvalidBaseQIndex) {

@@ -101,9 +101,7 @@ static INLINE void find_predictors(
                   bsize);
     }
   }
-  if (cm->features.switchable_motion_mode) {
-    av1_count_overlappable_neighbors(cm, xd);
-  }
+  av1_count_overlappable_neighbors(cm, xd);
   mbmi->num_proj_ref = 1;
 }
 

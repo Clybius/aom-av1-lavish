@@ -619,10 +619,11 @@ enum aome_enc_control_id {
    * point (OP), int parameter
    * Possible values are in the form of "ABxy".
    *  - AB: OP index.
-   *  - xy: Target level index for the OP. Can be values 0~23 (corresponding to
-   *    level 2.0 ~ 7.3, note levels 2.2, 2.3, 3.2, 3.3, 4.2, 4.3, 7.0, 7.1, 7.2
-   *    & 7.3 are undefined) or 24 (keep level stats only for level monitoring)
-   *    or 31 (maximum level parameter, no level-based constraints).
+   *  - xy: Target level index for the OP. Can be values 0~27 (corresponding to
+   *    level 2.0 ~ 8.3, note levels 2.2, 2.3, 3.2, 3.3, 4.2 & 4.3 are
+   *    undefined, and that levels 7.x and 8.x are in draft status), 31
+   *    (maximum level parameter, no level-based constraints) or 32 (keep
+   *    level stats only for level monitoring).
    *
    * E.g.:
    * - "0" means target level index 0 (2.0) for the 0th OP;
@@ -1462,7 +1463,25 @@ enum aome_enc_control_id {
    */
   AOME_SET_QUANT_SHARPNESS = AV1E_GET_TARGET_SEQ_LEVEL_IDX + 3,
   // ClybPatch -- Idea thanks to Opmox, sets the TPL model's strength / effectiveness.
-  AOME_SET_TPL_STRENGTH = AV1E_GET_TARGET_SEQ_LEVEL_IDX + 4,
+  AOME_SET_DELTA_QINDEX_MULT = AV1E_GET_TARGET_SEQ_LEVEL_IDX + 4,
+
+  AOME_SET_DELTA_QINDEX_MULT_POS = AOME_SET_DELTA_QINDEX_MULT + 1,
+
+  AOME_SET_DELTA_QINDEX_MULT_NEG = AOME_SET_DELTA_QINDEX_MULT + 2,
+
+  // ClybPatch -- qindex multiplier for vmaf's motion calculations
+  AOME_SET_VMAF_MOTION_MULT = AOME_SET_DELTA_QINDEX_MULT + 3,
+
+  // ClybPatch -- qindex multiplier for vmaf's motion calculations
+  AOME_SET_SSIM_RD_MULT = AOME_SET_DELTA_QINDEX_MULT + 4,
+
+  // Clybpatch -- Add force enable luma bias, even when not using Variance AQ.
+  AOME_SET_LUMA_BIAS = AOME_SET_DELTA_QINDEX_MULT + 5,
+
+  // ClybPatch -- Chroma Q offset
+  AV1E_SET_CHROMA_Q_OFFSET_U = AOME_SET_DELTA_QINDEX_MULT + 6,
+
+  AV1E_SET_CHROMA_Q_OFFSET_V = AOME_SET_DELTA_QINDEX_MULT + 7,
   /*!\brief Codec control function to get the number of operating points. int*
    * parameter.
    */
@@ -2093,8 +2112,29 @@ AOM_CTRL_USE_TYPE(AV1E_GET_TARGET_SEQ_LEVEL_IDX, int *)
 AOM_CTRL_USE_TYPE(AOME_SET_DQ_MODULATE, int)
 #define AOM_CTRL_AOME_SET_DQ_MODULATE
 
-AOM_CTRL_USE_TYPE(AOME_SET_TPL_STRENGTH, int)
-#define AOM_CTRL_AOME_SET_TPL_STRENGTH
+AOM_CTRL_USE_TYPE(AOME_SET_DELTA_QINDEX_MULT, int)
+#define AOM_CTRL_AOME_SET_DELTA_QINDEX_MULT
+
+AOM_CTRL_USE_TYPE(AOME_SET_DELTA_QINDEX_MULT_POS, int)
+#define AOM_CTRL_AOME_SET_DELTA_QINDEX_MULT_POS
+
+AOM_CTRL_USE_TYPE(AOME_SET_DELTA_QINDEX_MULT_NEG, int)
+#define AOM_CTRL_AOME_SET_DELTA_QINDEX_MULT_NEG
+
+AOM_CTRL_USE_TYPE(AOME_SET_VMAF_MOTION_MULT, int)
+#define AOM_CTRL_AOME_SET_VMAF_MOTION_MULT
+
+AOM_CTRL_USE_TYPE(AOME_SET_SSIM_RD_MULT, int)
+#define AOM_CTRL_AOME_SET_SSIM_RD_MULT
+
+AOM_CTRL_USE_TYPE(AOME_SET_LUMA_BIAS, int)
+#define AOM_CTRL_AOME_SET_LUMA_BIAS
+
+AOM_CTRL_USE_TYPE(AV1E_SET_CHROMA_Q_OFFSET_U, int)
+#define AOM_CTRL_AV1E_SET_CHROMA_Q_OFFSET_U
+
+AOM_CTRL_USE_TYPE(AV1E_SET_CHROMA_Q_OFFSET_V, int)
+#define AOM_CTRL_AOME_SET_CHROMA_Q_OFFSET_V
 
 AOM_CTRL_USE_TYPE(AV1E_GET_NUM_OPERATING_POINTS, int *)
 #define AOM_CTRL_AV1E_GET_NUM_OPERATING_POINTS

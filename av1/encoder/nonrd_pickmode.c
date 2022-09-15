@@ -177,29 +177,17 @@ static INLINE void init_best_pickmode(BEST_PICKMODE *bp) {
 static INLINE int subpel_select(AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bsize,
                                 int_mv *mv, MV ref_mv, FULLPEL_MV start_mv,
                                 bool fullpel_performed_well) {
-  const int frame_lowmotion = cpi->rc.avg_frame_low_motion;
-  // Reduce MV precision for higher int MV value & frame-level motion
-  if (cpi->sf.rt_sf.reduce_mv_pel_precision_highmotion >= 2) {
+  // Reduce MV precision to halfpel for higher int MV value& frame-level motion
+  if (cpi->sf.rt_sf.reduce_mv_pel_precision_highmotion == 1) {
     int mv_thresh = 4;
     const int is_low_resoln =
         (cpi->common.width * cpi->common.height <= 320 * 240);
     mv_thresh = (bsize > BLOCK_32X32) ? 2 : (bsize > BLOCK_16X16) ? 4 : 6;
-    if (frame_lowmotion > 0 && frame_lowmotion < 40) mv_thresh = 12;
+    if (cpi->rc.avg_frame_low_motion > 0 && cpi->rc.avg_frame_low_motion < 40)
+      mv_thresh = 12;
     mv_thresh = (is_low_resoln) ? mv_thresh >> 1 : mv_thresh;
     if (abs(mv->as_fullmv.row) >= mv_thresh ||
         abs(mv->as_fullmv.col) >= mv_thresh)
-      return HALF_PEL;
-  } else if (cpi->sf.rt_sf.reduce_mv_pel_precision_highmotion >= 1) {
-    int mv_thresh;
-    if (frame_lowmotion > 0 && frame_lowmotion < 40)
-      mv_thresh = 12;
-    else
-      mv_thresh = (bsize >= BLOCK_32X32) ? 4 : (bsize >= BLOCK_16X16) ? 6 : 8;
-    if (abs(mv->as_fullmv.row) >= (mv_thresh << 1) ||
-        abs(mv->as_fullmv.col) >= (mv_thresh << 1))
-      return FULL_PEL;
-    else if (abs(mv->as_fullmv.row) >= mv_thresh ||
-             abs(mv->as_fullmv.col) >= mv_thresh)
       return HALF_PEL;
   }
   // Reduce MV precision for relatively static (e.g. background), low-complex
@@ -630,7 +618,7 @@ static void model_skip_for_sb_y_large(AV1_COMP *cpi, BLOCK_SIZE bsize,
   TX_SIZE tx_size;
   int k;
 
-  if (x->force_zeromv_skip_for_blk) {
+  if (x->force_zeromv_skip) {
     *early_term = 1;
     rd_stats->rate = 0;
     rd_stats->dist = 0;
@@ -785,14 +773,7 @@ static void model_skip_for_sb_y_large(AV1_COMP *cpi, BLOCK_SIZE bsize,
 static void model_rd_for_sb_y(const AV1_COMP *const cpi, BLOCK_SIZE bsize,
                               MACROBLOCK *x, MACROBLOCKD *xd,
                               RD_STATS *rd_stats, unsigned int *var_out,
-                              int calculate_rd, int *early_term) {
-  if (x->force_zeromv_skip_for_blk && early_term != NULL) {
-    *early_term = 1;
-    rd_stats->rate = 0;
-    rd_stats->dist = 0;
-    rd_stats->sse = 0;
-  }
-
+                              int calculate_rd) {
   // Note our transform coeffs are 8 times an orthogonal transform.
   // Hence quantizer step is also 8 times. To get effective quantizer
   // we need to divide by 8 before sending to modeling function.
@@ -1549,7 +1530,7 @@ static void recheck_zeromv_after_denoising(
     xd->plane[0].pre[0] = yv12_mb[LAST_FRAME][0];
     av1_enc_build_inter_predictor_y(xd, mi_row, mi_col);
     unsigned int var;
-    model_rd_for_sb_y(cpi, bsize, x, xd, &this_rdc, &var, 1, NULL);
+    model_rd_for_sb_y(cpi, bsize, x, xd, &this_rdc, &var, 1);
 
     const int16_t mode_ctx =
         av1_mode_context_analyzer(mbmi_ext->mode_context, mi->ref_frame);
@@ -1661,7 +1642,7 @@ static void search_filter_ref(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *this_rdc,
                                 &pf_rd_stats[i], this_early_term, 1, best_sse,
                                 &curr_var, UINT_MAX);
     else
-      model_rd_for_sb_y(cpi, bsize, x, xd, &pf_rd_stats[i], &curr_var, 1, NULL);
+      model_rd_for_sb_y(cpi, bsize, x, xd, &pf_rd_stats[i], &curr_var, 1);
     pf_rd_stats[i].rate += av1_get_switchable_rate(
         x, xd, cm->features.interp_filter, cm->seq_params->enable_dual_filter);
     cost = RDCOST(x->rdmult, pf_rd_stats[i].rate, pf_rd_stats[i].dist);
@@ -1808,7 +1789,7 @@ static void search_motion_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *this_rdc,
                                   &pf_rd_stats[i], this_early_term, 1, best_sse,
                                   NULL, UINT_MAX);
       else
-        model_rd_for_sb_y(cpi, bsize, x, xd, &pf_rd_stats[i], NULL, 1, NULL);
+        model_rd_for_sb_y(cpi, bsize, x, xd, &pf_rd_stats[i], NULL, 1);
       pf_rd_stats[i].rate +=
           av1_get_switchable_rate(x, xd, cm->features.interp_filter,
                                   cm->seq_params->enable_dual_filter);
@@ -1871,7 +1852,7 @@ static void search_motion_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *this_rdc,
                                     &pf_rd_stats[i], this_early_term, 1,
                                     best_sse, NULL, UINT_MAX);
         else
-          model_rd_for_sb_y(cpi, bsize, x, xd, &pf_rd_stats[i], NULL, 1, NULL);
+          model_rd_for_sb_y(cpi, bsize, x, xd, &pf_rd_stats[i], NULL, 1);
 
         pf_rd_stats[i].rate +=
             mode_costs->motion_mode_cost[bsize][mi->motion_mode];
@@ -2103,7 +2084,7 @@ static AOM_INLINE void get_ref_frame_use_mask(AV1_COMP *cpi, MACROBLOCK *x,
   }
 
   if (use_last_ref_frame &&
-      (x->nonrd_prune_ref_frame_search > 2 || x->force_zeromv_skip_for_blk ||
+      (x->nonrd_prune_ref_frame_search > 2 || x->force_zeromv_skip ||
        (x->nonrd_prune_ref_frame_search > 1 && bsize > BLOCK_64X64))) {
     use_golden_ref_frame = 0;
     use_alt_ref_frame = 0;
@@ -2124,13 +2105,7 @@ static AOM_INLINE void get_ref_frame_use_mask(AV1_COMP *cpi, MACROBLOCK *x,
   }
 
   // Skip golden reference if color is set, on flat blocks with motion.
-  // For screen: always skip golden (if color_sensitivity_sb_g is set)
-  // except when x->nonrd_prune_ref_frame_search = 0. This latter flag
-  // may be set in the variance partition when golden is a much beter
-  // reference than last, in which case it may not be worth skipping
-  // golden completely.
-  if (((cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
-        x->nonrd_prune_ref_frame_search != 0) ||
+  if (((cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN) ||
        (x->source_variance < 500 &&
         x->content_state_sb.source_sad_nonrd > kLowSad)) &&
       (x->color_sensitivity_sb_g[0] == 1 || x->color_sensitivity_sb_g[1] == 1))
@@ -2797,7 +2772,7 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
   int use_zeromv =
       cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN ||
       ((cpi->oxcf.speed >= 9 && cpi->rc.avg_frame_low_motion > 70) ||
-       cpi->sf.rt_sf.nonrd_agressive_skip || x->force_zeromv_skip_for_blk);
+       cpi->sf.rt_sf.nonrd_agressive_skip || x->force_zeromv_skip);
   int skip_pred_mv = 0;
   const int num_inter_modes =
       use_zeromv ? NUM_INTER_MODES_REDUCED : NUM_INTER_MODES_RT;
@@ -2904,7 +2879,7 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
   get_ref_frame_use_mask(cpi, x, mi, mi_row, mi_col, bsize, gf_temporal_ref,
                          use_ref_frame_mask, &force_skip_low_temp_var);
 
-  skip_pred_mv = x->force_zeromv_skip_for_blk ||
+  skip_pred_mv = x->force_zeromv_skip ||
                  (x->nonrd_prune_ref_frame_search > 2 &&
                   x->color_sensitivity[0] != 2 && x->color_sensitivity[1] != 2);
 
@@ -3011,7 +2986,7 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
 
     if (!use_ref_frame_mask[ref_frame]) continue;
 
-    if (x->force_zeromv_skip_for_blk &&
+    if (x->force_zeromv_skip &&
         ((!(this_mode == NEARESTMV &&
             frame_mv[this_mode][ref_frame].as_int == 0) &&
           this_mode != GLOBALMV) ||
@@ -3183,23 +3158,15 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
       // Use y-sad already computed in find_predictors: take the sad with motion
       // vector closest to 0; the uv-sad computed below in set_color_sensitivity
       // is for zeromv.
-      // For screen: first check if golden reference is being used, if so,
-      // force color_sensitivity on if the color sensitivity for sb_g is on.
-      if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
-          use_ref_frame_mask[GOLDEN_FRAME]) {
-        if (x->color_sensitivity_sb_g[0] == 1) x->color_sensitivity[0] = 1;
-        if (x->color_sensitivity_sb_g[1] == 1) x->color_sensitivity[1] = 1;
-      } else {
-        int y_sad = x->pred_mv0_sad[LAST_FRAME];
-        if (x->pred_mv1_sad[LAST_FRAME] != INT_MAX &&
-            (abs(frame_mv[NEARMV][LAST_FRAME].as_mv.col) +
-             abs(frame_mv[NEARMV][LAST_FRAME].as_mv.row)) <
-                (abs(frame_mv[NEARESTMV][LAST_FRAME].as_mv.col) +
-                 abs(frame_mv[NEARESTMV][LAST_FRAME].as_mv.row)))
-          y_sad = x->pred_mv1_sad[LAST_FRAME];
-        set_color_sensitivity(cpi, x, bsize, y_sad, x->source_variance,
-                              yv12_mb[LAST_FRAME]);
-      }
+      int y_sad = x->pred_mv0_sad[LAST_FRAME];
+      if (x->pred_mv1_sad[LAST_FRAME] != INT_MAX &&
+          (abs(frame_mv[NEARMV][LAST_FRAME].as_mv.col) +
+           abs(frame_mv[NEARMV][LAST_FRAME].as_mv.row)) <
+              (abs(frame_mv[NEARESTMV][LAST_FRAME].as_mv.col) +
+               abs(frame_mv[NEARESTMV][LAST_FRAME].as_mv.row)))
+        y_sad = x->pred_mv1_sad[LAST_FRAME];
+      set_color_sensitivity(cpi, x, bsize, y_sad, x->source_variance,
+                            yv12_mb[LAST_FRAME]);
     }
     mi->motion_mode = SIMPLE_TRANSLATION;
 #if !CONFIG_REALTIME_ONLY
@@ -3278,8 +3245,7 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
                                   &this_early_term, 0, best_pickmode.best_sse,
                                   &var, var_threshold);
       } else {
-        model_rd_for_sb_y(cpi, bsize, x, xd, &this_rdc, &var, 0,
-                          &this_early_term);
+        model_rd_for_sb_y(cpi, bsize, x, xd, &this_rdc, &var, 0);
       }
       if (!comp_pred) {
         vars[INTER_OFFSET(this_mode)][ref_frame] = var;
@@ -3502,7 +3468,7 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
   ms_stat.num_nonskipped_searches[bsize][DC_PRED]++;
 #endif
 
-  if (!x->force_zeromv_skip_for_blk)
+  if (!x->force_zeromv_skip)
     estimate_intra_mode(cpi, x, bsize, best_early_term,
                         ref_costs_single[INTRA_FRAME], reuse_inter_pred,
                         &orig_dst, tmp, &this_mode_pred, &best_rdc,
@@ -3515,7 +3481,7 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
 
   // Check for IDTX: based only on Y channel, so avoid when color_sen is set.
   if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN && !skip_idtx_palette &&
-      !cpi->oxcf.txfm_cfg.use_inter_dct_only && !x->force_zeromv_skip_for_blk &&
+      !cpi->oxcf.txfm_cfg.use_inter_dct_only && !x->force_zeromv_skip &&
       is_inter_mode(best_pickmode.best_mode) &&
       (!cpi->sf.rt_sf.prune_idtx_nonrd ||
        (cpi->sf.rt_sf.prune_idtx_nonrd && bsize <= BLOCK_32X32 &&
@@ -3553,7 +3519,7 @@ void av1_nonrd_pick_inter_mode_sb(AV1_COMP *cpi, TileDataEnc *tile_data,
       av1_allow_palette(cpi->common.features.allow_screen_content_tools,
                         mi->bsize);
   try_palette = try_palette && is_mode_intra(best_pickmode.best_mode) &&
-                x->source_variance > 0 && !x->force_zeromv_skip_for_blk &&
+                x->source_variance > 0 && !x->force_zeromv_skip &&
                 (cpi->rc.high_source_sad || x->source_variance > 500);
 
   if (try_palette) {

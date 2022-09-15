@@ -234,7 +234,14 @@ typedef struct av1_codec_arg_definitions {
   arg_def_t strict_level_conformance;
   arg_def_t kf_max_pyr_height;
   arg_def_t dq_modulate;
-  arg_def_t tpl_strength;
+  arg_def_t delta_qindex_mult;
+  arg_def_t delta_qindex_mult_pos;
+  arg_def_t delta_qindex_mult_neg;
+  arg_def_t vmaf_motion_mult;
+  arg_def_t ssim_rd_mult;
+  arg_def_t luma_bias;
+  arg_def_t chroma_q_offset_u;
+  arg_def_t chroma_q_offset_v;
 #endif  // CONFIG_AV1_ENCODER
 } av1_codec_arg_definitions_t;
 

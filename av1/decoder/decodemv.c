@@ -1204,9 +1204,7 @@ static INLINE int assign_mv(AV1_COMMON *cm, MACROBLOCKD *xd,
                          .as_int;
       break;
     }
-    default: {
-      return 0;
-    }
+    default: { return 0; }
   }
 
   int ret = is_mv_valid(&mv[0].as_mv);

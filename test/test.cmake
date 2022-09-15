@@ -64,7 +64,6 @@ list(APPEND AOM_UNIT_TEST_ENCODER_SOURCES
             "${AOM_ROOT}/test/encode_test_driver.cc"
             "${AOM_ROOT}/test/encode_test_driver.h"
             "${AOM_ROOT}/test/end_to_end_psnr_test.cc"
-            "${AOM_ROOT}/test/forced_max_frame_width_height_test.cc"
             "${AOM_ROOT}/test/force_key_frame_test.cc"
             "${AOM_ROOT}/test/gf_pyr_height_test.cc"
             "${AOM_ROOT}/test/rt_end_to_end_test.cc"
@@ -322,7 +321,7 @@ if(NOT BUILD_SHARED_LIBS)
 
   endif()
 
-  if(HAVE_SSE4_2 OR HAVE_ARM_CRC32)
+  if(HAVE_SSE4_2)
     list(APPEND AOM_UNIT_TEST_ENCODER_SOURCES "${AOM_ROOT}/test/hash_test.cc")
   endif()
 
@@ -497,10 +496,6 @@ function(setup_aom_test_targets)
   if(HAVE_NEON)
     add_intrinsics_source_to_target("${AOM_NEON_INTRIN_FLAG}" "test_libaom"
                                     "AOM_UNIT_TEST_COMMON_INTRIN_NEON")
-  endif()
-  if(HAVE_ARM_CRC32)
-    add_intrinsics_source_to_target("${AOM_ARM_CRC32_FLAG}" "test_libaom"
-                                    "AOM_UNIT_TEST_COMMON_INTRIN_CRC32")
   endif()
 
   if(ENABLE_TESTDATA)

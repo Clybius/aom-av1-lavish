@@ -27,9 +27,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
 // Google Mock - a framework for writing C++ mock classes.
 //
 // This is the main header file a user should include.
+
+// GOOGLETEST_CM0002 DO NOT DELETE
 
 #ifndef GOOGLEMOCK_INCLUDE_GMOCK_GMOCK_H_
 #define GOOGLEMOCK_INCLUDE_GMOCK_GMOCK_H_
@@ -61,14 +64,13 @@
 #include "gmock/gmock-more-matchers.h"
 #include "gmock/gmock-nice-strict.h"
 #include "gmock/internal/gmock-internal-utils.h"
-#include "gmock/internal/gmock-port.h"
+
+namespace testing {
 
 // Declares Google Mock flags that we want a user to use programmatically.
 GMOCK_DECLARE_bool_(catch_leaked_mocks);
 GMOCK_DECLARE_string_(verbose);
 GMOCK_DECLARE_int32_(default_mock_behavior);
-
-namespace testing {
 
 // Initializes Google Mock.  This must be called before running the
 // tests.  In particular, it parses the command line for the flags

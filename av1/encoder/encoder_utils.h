@@ -49,22 +49,18 @@ static AOM_INLINE void suppress_active_map(AV1_COMP *cpi) {
         seg_map[i] = AM_SEGMENT_ID_ACTIVE;
 }
 
-// Returns 'size' in the number of Mode Info (MI) units. 'size' is either the
-// width or height.
-static AOM_INLINE int size_in_mi(int size) {
+static AOM_INLINE void set_mb_mi(CommonModeInfoParams *mi_params, int width,
+                                 int height) {
   // Ensure that the decoded width and height are both multiples of
   // 8 luma pixels (note: this may only be a multiple of 4 chroma pixels if
   // subsampling is used).
   // This simplifies the implementation of various experiments,
   // eg. cdef, which operates on units of 8x8 luma pixels.
-  const int aligned_size = ALIGN_POWER_OF_TWO(size, 3);
-  return aligned_size >> MI_SIZE_LOG2;
-}
+  const int aligned_width = ALIGN_POWER_OF_TWO(width, 3);
+  const int aligned_height = ALIGN_POWER_OF_TWO(height, 3);
 
-static AOM_INLINE void set_mb_mi(CommonModeInfoParams *mi_params, int width,
-                                 int height) {
-  mi_params->mi_cols = size_in_mi(width);
-  mi_params->mi_rows = size_in_mi(height);
+  mi_params->mi_cols = aligned_width >> MI_SIZE_LOG2;
+  mi_params->mi_rows = aligned_height >> MI_SIZE_LOG2;
   mi_params->mi_stride = calc_mi_size(mi_params->mi_cols);
 
   mi_params->mb_cols = (mi_params->mi_cols + 2) >> 2;
@@ -974,7 +970,6 @@ static AOM_INLINE int combine_prior_with_tpl_boost(double min_factor,
 static AOM_INLINE void set_size_independent_vars(AV1_COMP *cpi) {
   int i;
   AV1_COMMON *const cm = &cpi->common;
-  FeatureFlags *const features = &cm->features;
   for (i = LAST_FRAME; i <= ALTREF_FRAME; ++i) {
     cm->global_motion[i] = default_warp_params;
   }
@@ -982,9 +977,8 @@ static AOM_INLINE void set_size_independent_vars(AV1_COMP *cpi) {
 
   av1_set_speed_features_framesize_independent(cpi, cpi->speed);
   av1_set_rd_speed_thresholds(cpi);
-  features->interp_filter = SWITCHABLE;
-  features->switchable_motion_mode = is_switchable_motion_mode_allowed(
-      features->allow_warped_motion, cpi->oxcf.motion_mode_cfg.enable_obmc);
+  cm->features.interp_filter = SWITCHABLE;
+  cm->features.switchable_motion_mode = 1;
 }
 
 static AOM_INLINE void release_scaled_references(AV1_COMP *cpi) {

@@ -32,7 +32,7 @@ void aom_lpf_horizontal_6_quad_avx2(unsigned char *s, int p,
       _mm_broadcastb_epi8(_mm_cvtsi32_si128((int)_limit0[0]));
   const __m128i blimit_v =
       _mm_broadcastb_epi8(_mm_cvtsi32_si128((int)_blimit0[0]));
-  const __m128i zero = _mm_setzero_si128();
+  const __m128i zero = _mm_set1_epi16(0);
   const __m128i ff = _mm_cmpeq_epi8(zero, zero);
 
   p256_2 =
@@ -239,7 +239,7 @@ void aom_lpf_horizontal_8_quad_avx2(unsigned char *s, int p,
       _mm_broadcastb_epi8(_mm_cvtsi32_si128((int)_limit0[0]));
   const __m128i blimit_v =
       _mm_broadcastb_epi8(_mm_cvtsi32_si128((int)_blimit0[0]));
-  const __m128i zero = _mm_setzero_si128();
+  const __m128i zero = _mm_set1_epi16(0);
   const __m128i ff = _mm_cmpeq_epi8(zero, zero);
 
   p256_3 =
@@ -486,7 +486,7 @@ void aom_lpf_horizontal_14_quad_avx2(unsigned char *s, int p,
       _mm_broadcastb_epi8(_mm_cvtsi32_si128((int)_limit0[0]));
   const __m128i blimit_v =
       _mm_broadcastb_epi8(_mm_cvtsi32_si128((int)_blimit0[0]));
-  const __m128i zero = _mm_setzero_si128();
+  const __m128i zero = _mm_set1_epi16(0);
   const __m128i ff = _mm_cmpeq_epi8(zero, zero);
 
   p256_3 =

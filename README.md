@@ -1,6 +1,6 @@
 README.md                {#LREADME}
 =========
-# aom-av1-psy encoding library
+# aom-av1-lavish encoding library (An extended fork of aomenc)
 
 ## Building the library and applications {#building-the-library-and-applications}
 
@@ -20,16 +20,16 @@ README.md                {#LREADME}
    [EMSDK](https://kripken.github.io/emscripten-site/index.html).
 
 ### Get the code {#get-the-code}
-`git clone https://github.com/BlueSwordM/aom-av1-psy` for the **main branch**, where the main "psy" changes for aom-av1-psy can be looked at.
+`git clone https://github.com/Clybius/aom-av1-lavish` for the **main branch**, where the main "psy" and configuration changes for aom-av1-lavish can be looked at.
 
-`git clone https://github.com/BlueSwordM/aom-av1-psy -b full_build-4` for the **full_build-4 branch**, where most bigger non mainline targeted aom-av1-psy changes go.
+`git clone https://github.com/Clybius/aom-av1-lavish -b Endless_Instability` for the **Endless_Instability branch**, where most unstable / public testing changes go.
 
-`git clone https://github.com/BlueSwordM/aom-av1-psy -b full_build-alpha-4` for the **full_build-alpha-4 branch**, where even more more experimental changes go and what most of us enthusiasts use for encoding.
+`git clone https://github.com/Clybius/aom-av1-lavish -b Endless_Merging` for the **Endless_Merging branch**, where Endless_Instability's changes mixed with current aomenc updates go.
 
 ### Viewing the status of uploaded changes {#viewing-the-status-of-uploaded-changes}
 
 To check the status of a change that you uploaded, open
-[Github PRs](https://github.com/BlueSwordM/aom-av1-psy/pulls), sign in, and click Pull Requests.
+[Github PRs](https://github.com/Clybius/aom-av1-lavish/pulls), sign in, and click Pull Requests.
 
 ## Support {#support}
 
@@ -43,11 +43,11 @@ Other more miscalleneous discussions, contributions, and talks will be done else
 Bug reports can be filed in the Alliance for Open Media for general aomenc bugs
 [issue tracker](https://bugs.chromium.org/p/aomedia/issues/list).
 
-As for the ones related to aom-av1-psy change themselves, the issues tab can be used here on Github.
+As for the ones related to aom-av1-lavish changes themselves, the issues tab can be used here on Github.
 
 ### Advanced Prerequisites
 
-There are various advanced features that aom-av1-psy can utilize to further boost encoding quality that can be found in the **full_build-alpha-4** branch.
+There are various advanced features that aom-av1-lavish can utilize to further boost encoding quality that can be found in the **full_build-alpha-4** branch.
 
 These include butteraugli-jxl RD analysis(8-bit only currently), VMAF motion QP analysis(utilizing VMAF motion to enhance rate control in motion considerably, especially in lower luma scenarios), future SSIMULACRA2 RD analysis, and perceptual quality driven RD analysis with a strong VMAF motion QP analysis.
 

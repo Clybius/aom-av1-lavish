@@ -31,7 +31,6 @@ set_aom_detect_var(ARCH_X86_64 0 "Enables X86_64 architecture.")
 
 # ARM feature flags.
 set_aom_detect_var(HAVE_NEON 0 "Enables NEON intrinsics optimizations.")
-set_aom_detect_var(HAVE_ARM_CRC32 0 "Enables Arm CRC32 optimizations.")
 
 # MIPS feature flags.
 set_aom_detect_var(HAVE_DSPR2 0 "Enables DSPR2 optimizations.")

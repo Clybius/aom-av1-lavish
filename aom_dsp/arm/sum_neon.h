@@ -94,15 +94,6 @@ static INLINE uint32_t horizontal_add_u16x8(const uint16x8_t a) {
 #endif
 }
 
-static INLINE uint32_t horizontal_add_u32x2(const uint32x2_t a) {
-#if defined(__aarch64__)
-  return vaddv_u32(a);
-#else
-  const uint64x1_t b = vpaddl_u32(a);
-  return vget_lane_u32(vreinterpret_u32_u64(b), 0);
-#endif
-}
-
 static INLINE uint32_t horizontal_add_u16x4(const uint16x4_t a) {
 #if defined(__aarch64__)
   return vaddlv_u16(a);

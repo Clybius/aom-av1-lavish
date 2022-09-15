@@ -1514,9 +1514,6 @@ typedef struct REAL_TIME_SPEED_FEATURES {
   int prune_inter_modes_using_temp_var;
 
   // Reduce MV precision to halfpel for higher int MV value & frame-level motion
-  // 0: disabled
-  // 1: Reduce precision to halfpel, fullpel based on conservative thresholds
-  // 2: Reduce precision to halfpel using more aggressive thresholds
   int reduce_mv_pel_precision_highmotion;
 
   // Reduce MV precision for low complexity blocks
@@ -1558,9 +1555,6 @@ typedef struct REAL_TIME_SPEED_FEATURES {
 
   // For nonrd: early exit out of variance partition that sets the
   // block size to superblock size, and sets mode to zeromv-last skip.
-  // 0: disabled
-  // 1: zeromv-skip is enabled at SB level only
-  // 2: zeromv-skip is enabled at SB level and coding block level
   int part_early_exit_zeromv;
 
   // Early terminate inter mode search based on sse in non-rd path.
@@ -1585,19 +1579,11 @@ typedef struct REAL_TIME_SPEED_FEATURES {
   // gain of 0.78%.
   bool vbp_prune_16x16_split_using_min_max_sub_blk_var;
 
-  // A qindex threshold that determines whether to use qindex based CDEF filter
-  // strength estimation for screen content types. The strength estimation model
-  // used for screen contents prefers to allow cdef filtering for more frames.
-  // This sf is used to limit the frames which go through cdef filtering and
-  // following explains the setting of the same.
-  // MAXQ (255): This disables the usage of this sf. Here, frame does not use a
-  // screen content model thus reduces the number of frames that go through cdef
-  // filtering.
-  // MINQ (0): Frames always use screen content model thus increasing the number
-  // of frames that go through cdef filtering.
-  // This speed feature has a substantial gain on coding metrics, with moderate
-  // increase encoding time. Select threshold based on speed vs quality
-  // trade-off.
+  // A qindex threshold that determines whether to use qindex based
+  // CDEF filter strength estimation for screen content types.
+  // This speed feature has a substantial gain on coding metrics,
+  // with moderate increased encoding time.
+  // Set to zero to turn off this speed feature.
   int screen_content_cdef_filter_qindex_thresh;
 
   // Prune compound mode if its variance is higher than the variance of single

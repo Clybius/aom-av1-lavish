@@ -788,6 +788,10 @@ typedef struct {
   bool enable_hdr_deltaq;
   // Indicates if encoding with quantization matrices should be enabled.
   bool using_qm;
+  // ClybPatch -- Chroma Q Offset for U & V
+  int chroma_q_offset_u;
+
+  int chroma_q_offset_v;
 } QuantizationCfg;
 
 /*!\endcond */
@@ -1068,7 +1072,18 @@ typedef struct AV1EncoderConfig {
   // ClybPatch -- Add a modifiable parameter for modifying deltaq-mode=1's perceptual modulation via the interface
   int dq_modulate;
   // ClybPatch -- Add a modifiable parameter for modifying enable-tpl-model's effectiveness via the interface (Very WIP)
-  int tpl_strength;
+  int delta_qindex_mult;
+  // ClybPatch -- Add modifiable parameters for modifying the TPL model's upwards or downwards quantization (Very WIP, advanced)
+  int delta_qindex_mult_pos;
+
+  int delta_qindex_mult_neg;
+
+  int vmaf_motion_mult;
+
+  int ssim_rd_mult;
+
+  int luma_bias;
+
   /*!\endcond */
 } AV1EncoderConfig;
 
@@ -3422,11 +3437,6 @@ typedef struct AV1_COMP {
    * Struct for the reference structure for RTC.
    */
   RTC_REF rtc_ref;
-
-  /*!
-   * Block level thresholds to force zeromv-skip at partition level.
-   */
-  unsigned int zeromv_skip_thresh_exit_part[BLOCK_SIZES_ALL];
 } AV1_COMP;
 
 /*!
@@ -4083,12 +4093,6 @@ static INLINE int is_frame_resize_pending(const AV1_COMP *const cpi) {
            cpi->common.height != resize_pending_params->height));
 }
 
-// Check if CDEF is used.
-static INLINE int is_cdef_used(const AV1_COMMON *const cm) {
-  return cm->seq_params->enable_cdef && !cm->features.coded_lossless &&
-         !cm->tiles.large_scale;
-}
-
 // Check if loop restoration filter is used.
 static INLINE int is_restoration_used(const AV1_COMMON *const cm) {
   return cm->seq_params->enable_restoration && !cm->features.all_lossless &&
@@ -4099,12 +4103,6 @@ static INLINE int is_inter_tx_size_search_level_one(
     const TX_SPEED_FEATURES *tx_sf) {
   return (tx_sf->inter_tx_size_search_init_depth_rect >= 1 &&
           tx_sf->inter_tx_size_search_init_depth_sqr >= 1);
-}
-
-// Enable switchable motion mode only if warp and OBMC tools are allowed
-static INLINE bool is_switchable_motion_mode_allowed(bool allow_warped_motion,
-                                                     bool enable_obmc) {
-  return (allow_warped_motion || enable_obmc);
 }
 
 #if CONFIG_AV1_TEMPORAL_DENOISING

@@ -82,7 +82,6 @@ class RefFrameManager {
   int cur_global_order_idx_;
   RefFrameTable ref_frame_table_;
   int max_ref_frames_;
-  bool allow_two_fwd_frames_;
   std::deque<int> free_ref_idx_list_;
   std::vector<int> forward_stack_;
   std::deque<int> backward_queue_;

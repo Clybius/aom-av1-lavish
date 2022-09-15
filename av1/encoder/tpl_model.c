@@ -912,8 +912,7 @@ static AOM_INLINE void mode_estimation(AV1_COMP *cpi,
   ref_frame_ptr[0] =
       best_mode == NEW_NEWMV
           ? tpl_data->ref_frame[comp_ref_frames[best_cmp_rf_idx][0]]
-      : best_rf_idx >= 0 ? tpl_data->ref_frame[best_rf_idx]
-                         : NULL;
+          : best_rf_idx >= 0 ? tpl_data->ref_frame[best_rf_idx] : NULL;
   ref_frame_ptr[1] =
       best_mode == NEW_NEWMV
           ? tpl_data->ref_frame[comp_ref_frames[best_cmp_rf_idx][1]]

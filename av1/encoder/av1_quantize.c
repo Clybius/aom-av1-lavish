@@ -608,15 +608,21 @@ void av1_build_quantizer(aom_bit_depth_t bit_depth, int y_dc_delta_q,
   for (q = 0; q < QINDEX_RANGE; q++) {
     int qzbin_factor = get_qzbin_factor(q, bit_depth);
     int qrounding_factor = q == 0 ? 64 : 48;
-    const int sharpness_adjustment = 16 * (7 - quant_sharpness) / 7;
+    int sharpness_adjustment = 16 * (7 - quant_sharpness) / 7;
     if (quant_sharpness > 0 && q > 0) {
       qzbin_factor = 64 + sharpness_adjustment;
       qrounding_factor = 64 - sharpness_adjustment;
+    } else if (quant_sharpness < 0 && q > 0) {
+      sharpness_adjustment = 16 * (7 - -quant_sharpness) / 7;
+      qzbin_factor = 64 - -sharpness_adjustment;
+      qrounding_factor = 64 + -sharpness_adjustment;
     }
     for (i = 0; i < 2; ++i) {
       int qrounding_factor_fp = 64;
       if (quant_sharpness > 0)
         qrounding_factor_fp = 64 - sharpness_adjustment;
+      if (quant_sharpness < 0)
+        qrounding_factor_fp = 64 + -sharpness_adjustment;
       // y quantizer with TX scale
       quant_QTX = i == 0 ? av1_dc_quant_QTX(q, y_dc_delta_q, bit_depth)
                          : av1_ac_quant_QTX(q, 0, bit_depth);
@@ -808,7 +814,7 @@ static int adjust_hdr_cr_deltaq(int base_qindex) {
 }
 
 void av1_set_quantizer(AV1_COMP *const cpi, int min_qmlevel, int max_qmlevel,
-                       int q, int enable_chroma_deltaq, int enable_hdr_deltaq) {
+                       int q, int enable_chroma_deltaq, int enable_hdr_deltaq, int chroma_q_offset_u, int chroma_q_offset_v) {
   // quantizer has to be reinitialized with av1_init_quantizer() if any
   // delta_q changes.
   AV1_COMMON *const cm = &cpi->common;
@@ -846,10 +852,11 @@ void av1_set_quantizer(AV1_COMP *const cpi, int min_qmlevel, int max_qmlevel,
       adjustment = 3;
     }
   }
-  quant_params->u_dc_delta_q = adjustment;
-  quant_params->u_ac_delta_q = adjustment;
-  quant_params->v_dc_delta_q = adjustment;
-  quant_params->v_ac_delta_q = adjustment;
+
+  quant_params->u_dc_delta_q = adjustment + chroma_q_offset_u;
+  quant_params->u_ac_delta_q = adjustment + chroma_q_offset_u;
+  quant_params->v_dc_delta_q = adjustment + chroma_q_offset_v;
+  quant_params->v_ac_delta_q = adjustment + chroma_q_offset_v;
 
   quant_params->qmatrix_level_y =
       aom_get_qmlevel(quant_params->base_qindex, min_qmlevel, max_qmlevel);

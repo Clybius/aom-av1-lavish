@@ -249,6 +249,11 @@ Status AV1RateControlQMode::SetRcParam(const RateControlParam &rc_param) {
                   << ") must be in the range [1, 7].";
     return { AOM_CODEC_INVALID_PARAM, error_message.str() };
   }
+  if (rc_param.max_depth < 1 || rc_param.max_depth > 5) {
+    error_message << "max_depth (" << rc_param.max_depth
+                  << ") must be in the range [1, 5].";
+    return { AOM_CODEC_INVALID_PARAM, error_message.str() };
+  }
   if (rc_param.base_q_index < 0 || rc_param.base_q_index > 255) {
     error_message << "base_q_index (" << rc_param.base_q_index
                   << ") must be in the range [0, 255].";

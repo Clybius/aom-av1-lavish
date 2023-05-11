@@ -2543,7 +2543,7 @@ void av1_set_speed_features_qindex_dependent(AV1_COMP *cpi, int speed) {
   if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY && (speed >=1 && speed <=3)){
 
     const int qindex_thresh_cdef_sf_s1_s3_l1[2] = { 104, 64 };
-    const int qindex_thresh_cdef_sf_s1_s3_l2[2] = { 92, 48 };
+//    const int qindex_thresh_cdef_sf_s1_s3_l2[2] = { 92, 48 };
 
       //You already start at Level Q2, since we're already pruning at an equivalent L1
       sf->lpf_sf.cdef_pick_method = CDEF_FULL_SEARCH_Q2;

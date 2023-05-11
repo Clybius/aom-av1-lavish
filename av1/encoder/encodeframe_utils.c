@@ -16,6 +16,7 @@
 #include "av1/encoder/encoder.h"
 #include "av1/encoder/encodeframe_utils.h"
 #include "av1/encoder/rdopt.h"
+#include "aq_variance.h"
 
 void av1_set_ssim_rdmult(const AV1_COMP *const cpi, int *errorperbit,
                          const BLOCK_SIZE bsize, const int mi_row,

@@ -927,8 +927,6 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   if (extra_cfg->lossless) {
     if (extra_cfg->aq_mode != 0)
       ERROR("Only --aq_mode=0 can be used with --lossless=1.");
-    if (extra_cfg->enable_chroma_deltaq)
-      ERROR("Only --enable_chroma_deltaq=0 can be used with --lossless=1.");
     if (extra_cfg->chroma_q_offset_u)
       ERROR("Only --chroma_q_offset_u=0 can be used with --lossless=1.");
     if (extra_cfg->chroma_q_offset_v)

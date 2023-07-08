@@ -882,7 +882,7 @@ void av1_set_quantizer(AV1_COMP *const cpi, int min_qmlevel, int max_qmlevel,
 
   // TODO(aomedia:2717): need to design better delta
   int adjustment = 0;
-  if (enable_chroma_deltaq && chroma_q_offset_u != 0 && chroma_q_offset_v != 0) {
+  if (enable_chroma_deltaq && chroma_q_offset_u != 0 && chroma_q_offset_v != 0 && !is_lossless_requested(&cpi->oxcf.rc_cfg)) {
     // If chroma-deltaq is enabled and the user hasn't specifed their own
     // offsets, we apply default offsets. 420: -2, 422: -1, 444: +2
     int subsampling = cpi->source->subsampling_x + cpi->source->subsampling_y;

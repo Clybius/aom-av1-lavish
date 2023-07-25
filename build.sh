@@ -57,7 +57,7 @@ main() {
   done
 
   info "Building with $jobs jobs..."
-  readarray -t repo_files <<< $(ls -a1 | tail -n+3 | grep -ve 'build-' -e "${0##*/}" -e repo.tar)
+  readarray -t repo_files <<< $(ls -a1 | tail -n+3 | grep -ve 'build-' -e "${0##*/}" -e 'repo.tar' -e '.git')
   configure="cmake .. -DENABLE_DOCS=$docs -DENABLE_TESTS=$tests -DBUILD_SHARED_LIBS=$shared_libs -DCONFIG_TUNE_VMAF=$vmaf -DCONFIG_TUNE_BUTTERAUGLI=$butteraugli"
   build="make -j$jobs"
 

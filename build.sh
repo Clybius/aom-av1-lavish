@@ -66,6 +66,7 @@ main() {
   mkdir -p build
   cp -r build-vanilla/cmake build
 
+  # Using tar because using git revert after git apply breaks
   for patch in patches/*.patch; do
     rm -f repo.tar
     tar cf repo.tar "${repo_files[@]}"
@@ -92,7 +93,6 @@ build_component() {
         name="${name##*/}"; name="${name%.*}"
   local build_dir="build"
 
-  # Clean build files
   if [ -d "$build_dir/cmake" ]; then
     mv "$build_dir/cmake" "cmake-tmp"
     rm -rf "$build_dir" 2>/dev/null
@@ -100,7 +100,6 @@ build_component() {
     mv "cmake-tmp" "$build_dir/cmake"
   fi
 
-  # Run various build commands
   echo; info "Building $name"
   cd "$build_dir"
   if [ -n "$configure" ]; then
@@ -117,7 +116,6 @@ build_component() {
 }
 
 check_deps() {
-  # Retrieve package list
   if [ -z "$packages" ]; then
     if [ -f /bin/dpkg-query ]; then
       readarray -t packages <<< $(dpkg-query -W -f='${Package}\n')
@@ -129,7 +127,6 @@ check_deps() {
     fi
   fi
 
-  # Find missing packages
   unset missing
   for dependency in "$@"; do
     unset found
@@ -139,7 +136,6 @@ check_deps() {
     [ -z "$found" ] && missing+=("$dependency")
   done
 
-  # Print the missing packages
   [ -n "$missing" ] && error "Missing dependencies: ${missing[@]}"
 }
 

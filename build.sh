@@ -20,6 +20,9 @@ main() {
   local tests=0
   local docs=0
 
+  check_deps make gcc cmake nasm yasm vim pkgconf
+  echo
+
   while [[ "$#" -gt 0 ]]; do
     key="$1"
     case "$1" in
@@ -29,7 +32,7 @@ main() {
         echo "Options:"
         echo "  -v, --vmaf           Enable VMAF"
         echo "  -b, --butteraugli    Enable Butteraugli"
-        echo "  -s, --shared-libs    Enable shared libraries"
+        echo "  -l, --shared-libs    Enable shared libraries"
         echo "  -t, --tests          Enable tests building"
         echo "  -d, --docs           Enable documentation building"
         echo "  -o, --optimize       Enable optimizations (-Ofast -flto -march=native)"
@@ -39,18 +42,21 @@ main() {
         echo
         exit 0
         ;;
-      -v|--vmaf) vmaf=1; shift;;
-      -b|--butteraugli) butteraugli=1; shift;;
-      -s|--shared-libs) shared_libs=1; shift;;
-      -t|--tests) tests=1; shift;;
-      -d|--docs) tests=1; shift;;
-      -o|--optimize) optimize='-Ofast -flto -march=native'; shift;;
-      -s|--static) static='-static'; shift;;
+      -v|--vmaf) vmaf=1; check_deps vmaf; info 'Building with VMAF support...'; shift;;
+      -b|--butteraugli) butteraugli=1; info 'Building with Butteraugli support...'
+         warn "libjxl needs to be compiled and installed with commit '4e4f49c57f165809a75ccd12d2ce5c060963aa01' for butteraugli support"
+         check_deps libjxl; shift;;
+      -l|--shared-libs) shared_libs=1; info 'Building shared libs...'; shift;;
+      -t|--tests) tests=1; info 'Building tests...' shift;;
+      -d|--docs) docs=1; info 'Building docs...' shift;;
+      -o|--optimize) optimize='-Ofast -flto -march=native'; info 'Building with optimization flags...'; shift;;
+      -s|--static) static='-static'; info 'Building a static binary...'; shift;;
       -j|--jobs) jobs="$2"; shift; shift;;
       *) error "Unknown option: $key";;
     esac
   done
 
+  info "Building with $jobs jobs..."
   readarray -t repo_files <<< $(ls -a1 | tail -n+3 | grep -ve 'build-' -e "${0##*/}" -e repo.tar)
   configure="cmake .. -DENABLE_DOCS=$docs -DENABLE_TESTS=$tests -DBUILD_SHARED_LIBS=$shared_libs -DCONFIG_TUNE_VMAF=$vmaf -DCONFIG_TUNE_BUTTERAUGLI=$butteraugli"
   build="make -j$jobs"
@@ -95,15 +101,46 @@ build_component() {
   fi
 
   # Run various build commands
-  info "Building $name"
+  echo; info "Building $name"
   cd "$build_dir"
   if [ -n "$configure" ]; then
+    echo -e "\n\e[35m$configure -DCMAKE_CXX_FLAGS='$optimize $static' -DCMAKE_C_FLAGS='$optimize $static'\e[0m\n"
     $configure -DCMAKE_CXX_FLAGS="$optimize $static" -DCMAKE_C_FLAGS="$optimize $static" \
     || error "Failed to configure $name"
   fi
-  if [ -n "$build" ]; then $build || error "Failed to build $name"; fi
+  if [ -n "$build" ]; then
+    echo -e "\n\e[35m$build\e[0m\n"
+    $build || error "Failed to build $name"
+  fi
   cd "$path"
   success "Built $name"
+}
+
+check_deps() {
+  # Retrieve package list
+  if [ -z "$packages" ]; then
+    if [ -f /bin/dpkg-query ]; then
+      readarray -t packages <<< $(dpkg-query -W -f='${Package}\n')
+    elif [ -f /bin/pacman ]; then
+      readarray -t packages <<< $(pacman -Qq)
+    else
+      warn "The system does not have dpkg or pacman intalled, proceeding without dependency checks."
+      return
+    fi
+  fi
+
+  # Find missing packages
+  unset missing
+  for dependency in "$@"; do
+    unset found
+    for package in "${packages[@]}"; do
+      [ "$package" = "$dependency" ] && found=true
+    done
+    [ -z "$found" ] && missing+=("$dependency")
+  done
+
+  # Print the missing packages
+  [ -n "$missing" ] && error "Missing dependencies: ${missing[@]}"
 }
 
 main "$@"

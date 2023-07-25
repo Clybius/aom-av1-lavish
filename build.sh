@@ -61,10 +61,10 @@ main() {
   configure="cmake .. -DENABLE_DOCS=$docs -DENABLE_TESTS=$tests -DBUILD_SHARED_LIBS=$shared_libs -DCONFIG_TUNE_VMAF=$vmaf -DCONFIG_TUNE_BUTTERAUGLI=$butteraugli"
   build="make -j$jobs"
 
-  build_component 'vanilla'
-  mv build build-vanilla
+  build_component 'lavish'
+  mv build build-lavish
   mkdir -p build
-  cp -r build-vanilla/cmake build
+  cp -r build-lavish/cmake build
 
   # Using tar because using git revert after git apply breaks
   for patch in patches/*.patch; do

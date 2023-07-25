@@ -30,8 +30,8 @@ main() {
         echo
         echo "Usage: $0 [options]"
         echo "Options:"
-        echo "  -v, --vmaf           Enable VMAF"
-        echo "  -b, --butteraugli    Enable Butteraugli"
+        echo "  -v, --vmaf           Enable VMAF support"
+        echo "  -b, --butteraugli    Enable Butteraugli support"
         echo "  -l, --shared-libs    Enable shared libraries"
         echo "  -t, --tests          Enable tests building"
         echo "  -d, --docs           Enable documentation building"
@@ -48,7 +48,7 @@ main() {
          check_deps libjxl; shift;;
       -l|--shared-libs) shared_libs=1; info 'Building shared libs...'; shift;;
       -t|--tests) tests=1; info 'Building tests...' shift;;
-      -d|--docs) docs=1; info 'Building docs...' shift;;
+      -d|--docs) docs=1; check_deps doxygen; info 'Building docs...' shift;;
       -o|--optimize) optimize='-Ofast -flto -march=native'; info 'Building with optimization flags...'; shift;;
       -s|--static) static='-static'; info 'Building a static binary...'; shift;;
       -j|--jobs) jobs="$2"; shift; shift;;

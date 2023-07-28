@@ -42,10 +42,10 @@ main() {
         echo
         exit 0
         ;;
-      -v|--vmaf) vmaf=1; check_deps vmaf; info 'Building with VMAF support...'; shift;;
+      -v|--vmaf) vmaf=1; check_deps vmaf/vmaf-git; info 'Building with VMAF support...'; shift;;
       -b|--butteraugli) butteraugli=1; info 'Building with Butteraugli support...'
          warn "libjxl needs to be compiled and installed with commit '4e4f49c57f165809a75ccd12d2ce5c060963aa01' for butteraugli support"
-         check_deps libjxl; shift;;
+         check_deps libjxl/libjxl-metrics-git; shift;;
       -l|--shared-libs) shared_libs=1; info 'Building shared libs...'; shift;;
       -t|--tests) tests=1; info 'Building tests...' shift;;
       -d|--docs) docs=1; check_deps doxygen; info 'Building docs...' shift;;
@@ -130,8 +130,14 @@ check_deps() {
   unset missing
   for dependency in "$@"; do
     unset found
-    for package in "${packages[@]}"; do
-      [ "$package" = "$dependency" ] && found=true
+    IFS="/" read -ra dependencies <<< "$dependency"
+    for dep in "${dependencies[@]}"; do
+      for package in "${packages[@]}"; do
+        if [ "$package" = "$dep" ]; then
+          found=true
+          break 2  # Exit both inner and outer loops
+        fi
+      done
     done
     [ -z "$found" ] && missing+=("$dependency")
   done

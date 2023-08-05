@@ -1,0 +1,965 @@
+diff --git a/aom/aomcx.h b/aom/aomcx.h
+index dbbe0c246..447cb09f9 100644
+--- a/aom/aomcx.h
++++ b/aom/aomcx.h
+@@ -1516,6 +1516,8 @@ enum aome_enc_control_id {
+   
+   AOME_SET_BUTTERAUGLI_QUANT_MULT_NEG = AOME_SET_DELTA_QINDEX_MULT + 23,
+ 
++  AOME_SET_LUMA_BIAS_POWER = AOME_SET_DELTA_QINDEX_MULT + 24,
++
+   /*!\brief Codec control function to get the number of operating points. int*
+    * parameter.
+    */
+@@ -2289,6 +2291,9 @@ AOM_CTRL_USE_TYPE(AOME_SET_BUTTERAUGLI_QUANT_MULT_POS, int)
+ AOM_CTRL_USE_TYPE(AOME_SET_BUTTERAUGLI_QUANT_MULT_NEG, int)
+ #define AOM_CTRL_AOME_SET_BUTTERAUGLI_QUANT_MULT_NEG
+ 
++AOM_CTRL_USE_TYPE(AOME_SET_LUMA_BIAS_POWER, int)
++#define AOM_CTRL_AOME_SET_LUMA_BIAS_POWER
++
+ AOM_CTRL_USE_TYPE(AV1E_GET_NUM_OPERATING_POINTS, int *)
+ #define AOM_CTRL_AV1E_GET_NUM_OPERATING_POINTS
+ 
+diff --git a/aom_dsp/butteraugli.c b/aom_dsp/butteraugli.c
+index 8ddf35a1e..2cf706fd6 100644
+--- a/aom_dsp/butteraugli.c
++++ b/aom_dsp/butteraugli.c
+@@ -43,9 +43,13 @@ int aom_calc_butteraugli(AV1_COMP *cpi, const YV12_BUFFER_CONFIG *source,
+   const size_t buffer_size = height * stride_argb * (bit_depth > 8 ? 2 : 1);
+   uint8_t *src_argb = (uint8_t *)aom_malloc(buffer_size);
+   uint8_t *distorted_argb = (uint8_t *)aom_malloc(buffer_size);
++  uint8_t *src_rgba = (uint8_t *)aom_malloc(buffer_size);
++  uint8_t *distorted_rgba = (uint8_t *)aom_malloc(buffer_size);
+   if (!src_argb || !distorted_argb) {
+     aom_free(src_argb);
+     aom_free(distorted_argb);
++    aom_free(src_rgba);
++    aom_free(distorted_rgba);
+     return 0;
+   }
+ 
+@@ -68,6 +72,9 @@ int aom_calc_butteraugli(AV1_COMP *cpi, const YV12_BUFFER_CONFIG *source,
+                       CONVERT_TO_SHORTPTR(distorted->u_buffer), distorted->uv_stride,
+                       CONVERT_TO_SHORTPTR(distorted->v_buffer), distorted->uv_stride,
+                       distorted_argb, stride_argb, yuv_constants, width, height);
++
++      BGRAToARGB(src_argb, stride_argb, src_rgba, stride_argb, width, height);
++      BGRAToARGB(distorted_argb, stride_argb, distorted_rgba, stride_argb, width, height);
+     }
+   } else if (ss_x == 1 && ss_y == 0) {
+     if (bit_depth == 8) {
+@@ -110,13 +117,15 @@ int aom_calc_butteraugli(AV1_COMP *cpi, const YV12_BUFFER_CONFIG *source,
+   } else {
+     aom_free(src_argb);
+     aom_free(distorted_argb);
++    aom_free(src_rgba);
++    aom_free(distorted_rgba);
+     return 0;
+   }
+   float hf_asym_val = (float)hf_asymmetry / 10.0f;
+   JxlPixelFormat pixel_format = { 4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0 };
+   if (bit_depth == 10 || bit_depth == 12) {
+     pixel_format.data_type = JXL_TYPE_UINT16;
+-    pixel_format.endianness = JXL_BIG_ENDIAN;
++    //pixel_format.endianness = JXL_BIG_ENDIAN;
+   }
+   JxlButteraugliApi *api = JxlButteraugliApiCreate(NULL);
+   JxlParallelRunner runner = JxlThreadParallelRunnerCreate(NULL, 6);
+@@ -125,20 +134,22 @@ int aom_calc_butteraugli(AV1_COMP *cpi, const YV12_BUFFER_CONFIG *source,
+   JxlButteraugliApiSetIntensityTarget(api, (float)target_intensity);
+ 
+   JxlButteraugliResult *result = JxlButteraugliCompute(
+-      api, width, height, &pixel_format, src_argb, buffer_size, &pixel_format,
+-      distorted_argb, buffer_size);
++      api, width, height, &pixel_format, src_rgba, buffer_size, &pixel_format,
++      distorted_rgba, buffer_size);
+ 
+   const float *distmap = NULL;
+   uint32_t row_stride;
+   JxlButteraugliResultGetDistmap(result, &distmap, &row_stride);
+-  cpi->butteraugli_info.distance = JxlButteraugliResultGetDistance(result, 3.0f);
+-  //printf("distance: %f, bit_depth: %d, row_stride: %d\n", cpi->butteraugli_info.distance, bit_depth, row_stride);
++  cpi->butteraugli_info.distance = JxlButteraugliResultGetDistance(result, 1.0f);
++  printf("distance: %f, bit_depth: %d, row_stride: %d\n", cpi->butteraugli_info.distance, bit_depth, row_stride);
+   if (distmap == NULL) {
+     JxlButteraugliApiDestroy(api);
+     JxlButteraugliResultDestroy(result);
+     JxlThreadParallelRunnerDestroy(runner);
+     aom_free(src_argb);
+     aom_free(distorted_argb);
++    aom_free(src_rgba);
++    aom_free(distorted_rgba);
+     return 0;
+   }
+ 
+@@ -153,5 +164,7 @@ int aom_calc_butteraugli(AV1_COMP *cpi, const YV12_BUFFER_CONFIG *source,
+   JxlThreadParallelRunnerDestroy(runner);
+   aom_free(src_argb);
+   aom_free(distorted_argb);
++  aom_free(src_rgba);
++  aom_free(distorted_rgba);
+   return 1;
+ }
+diff --git a/apps/aomenc.c b/apps/aomenc.c
+index 8d0f4988a..5cde6528a 100644
+--- a/apps/aomenc.c
++++ b/apps/aomenc.c
+@@ -234,12 +234,12 @@ static const int av1_arg_ctrl_map[] = { AOME_SET_CPUUSED,
+ #endif
+                                         AV1E_SET_DV_COST_UPD_FREQ,
+                                         AV1E_SET_PARTITION_INFO_PATH,
++                                        AV1E_ENABLE_RATE_GUIDE_DELTAQ,
++                                        AV1E_SET_RATE_DISTRIBUTION_INFO,
+                                         AV1E_SET_ENABLE_DIRECTIONAL_INTRA,
+                                         AV1E_SET_ENABLE_TX_SIZE_SEARCH,
+                                         AV1E_SET_LOOPFILTER_CONTROL,
+                                         AV1E_SET_AUTO_INTRA_TOOLS_OFF,
+-                                        AV1E_ENABLE_RATE_GUIDE_DELTAQ,
+-                                        AV1E_SET_RATE_DISTRIBUTION_INFO,
+                                         AOME_SET_DQ_MODULATE,
+                                         AOME_SET_DELTA_QINDEX_MULT,
+                                         AOME_SET_DELTA_QINDEX_MULT_POS,
+@@ -271,6 +271,7 @@ static const int av1_arg_ctrl_map[] = { AOME_SET_CPUUSED,
+                                         AOME_SET_VMAF_RD_MULT,
+ #endif
+                                         AOME_SET_TPL_RD_MULT,
++                                        AOME_SET_LUMA_BIAS_POWER,
+                                         0 };
+ 
+ const arg_def_t *main_args[] = { &g_av1_codec_arg_defs.help,
+@@ -509,6 +510,7 @@ const arg_def_t *av1_ctrl_args[] = {
+   &g_av1_codec_arg_defs.vmaf_rd_mult,
+ #endif
+   &g_av1_codec_arg_defs.tpl_rd_mult,
++  &g_av1_codec_arg_defs.luma_bias_power,
+   NULL,
+ };
+ 
+diff --git a/av1/arg_defs.c b/av1/arg_defs.c
+index 446defe32..da36e4dd9 100644
+--- a/av1/arg_defs.c
++++ b/av1/arg_defs.c
+@@ -732,7 +732,7 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
+                                   "(Meant for hyper-tuning, only active with ipq and ssim tunes, defaults to 100)"),
+   .luma_bias = ARG_DEF(NULL, "luma-bias", 1,
+                        "Apply a bias to low luma blocks "
+-                                  "(Recommended to leave default (-15..(1)..15)"),
++                                  "Value range: (0)...100)"),
+   .chroma_q_offset_u = ARG_DEF(NULL, "chroma-q-offset-u", 1,
+                        "Adjust the automatic chroma Q offset for the u plane"),
+   .chroma_q_offset_v = ARG_DEF(NULL, "chroma-q-offset-v", 1,
+@@ -784,6 +784,9 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
+   .tpl_rd_mult = ARG_DEF(NULL, "tpl-rd-mult", 1,
+                        "Multiplier for tpl rdmult "
+                                   "(Meant for hyper-tuning, defaults to 100)"),
++  .luma_bias_power = ARG_DEF(NULL, "luma-bias-power", 1,
++                       "Controls the power curve of the luma bias, higher = stronger and later lower luma curve "
++                                  "Value range: 1..(3)..4)"),
+   .sb_qp_sweep =
+       ARG_DEF(NULL, "sb-qp-sweep", 1,
+               "When set to 1, enable the superblock level qp sweep for a "
+diff --git a/av1/arg_defs.h b/av1/arg_defs.h
+index 949baf905..147a80b4e 100644
+--- a/av1/arg_defs.h
++++ b/av1/arg_defs.h
+@@ -267,6 +267,7 @@ typedef struct av1_codec_arg_definitions {
+   arg_def_t vmaf_rd_mult;
+ #endif
+   arg_def_t tpl_rd_mult;
++  arg_def_t luma_bias_power;
+   arg_def_t sb_qp_sweep;
+   arg_def_t global_motion_method;
+ #endif  // CONFIG_AV1_ENCODER
+diff --git a/av1/av1_cx_iface.c b/av1/av1_cx_iface.c
+index 5599cb162..393510c1d 100644
+--- a/av1/av1_cx_iface.c
++++ b/av1/av1_cx_iface.c
+@@ -222,6 +222,7 @@ struct av1_extracfg {
+   int vmaf_resize_factor;
+   int vmaf_rd_mult;
+   int tpl_rd_mult;
++  int luma_bias_power;
+   int sb_qp_sweep;
+   GlobalMotionMethod global_motion_method;
+ };
+@@ -397,7 +398,7 @@ static const struct av1_extracfg default_extra_cfg = {
+   -1,              // delta_qindex_mult_neg
+   100,             // vmaf_motion_mult
+   100,             // ssim_rd_mult
+-  1,               // luma_bias
++  0,               // luma_bias
+   0,               // vmaf_preprocessing
+   0,               // vmaf_quantization
+   100,             // butteraugli_intensity_target
+@@ -413,6 +414,7 @@ static const struct av1_extracfg default_extra_cfg = {
+   1,               // vmaf_resize_factor
+   100,             // vmaf_rd_mult
+   100,             // tpl_rd_mult
++  3,               // luma_bias_power
+   0,               // sb_qp_sweep
+   GLOBAL_MOTION_METHOD_DISFLOW,  // global_motion_method
+ };
+@@ -574,7 +576,7 @@ static const struct av1_extracfg default_extra_cfg = {
+   -1,              // delta_qindex_mult_neg
+   100,             // vmaf_motion_mult
+   100,             // ssim_rd_mult
+-  1,               // luma_bias
++  0,               // luma_bias
+   0,               // vmaf_preprocessing
+   0,               // vmaf_quantization
+   100,             // butteraugli_intensity_target
+@@ -590,6 +592,7 @@ static const struct av1_extracfg default_extra_cfg = {
+   1,               // vmaf_resize_factor
+   100,             // vmaf_rd_mult
+   100,             // tpl_rd_mult
++  3,               // luma_bias_power
+   0,               // sb_qp_sweep
+   GLOBAL_MOTION_METHOD_DISFLOW,  // global_motion_method
+ };
+@@ -980,7 +983,7 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
+   RANGE_CHECK(extra_cfg, delta_qindex_mult_neg, -1, 1000);
+   RANGE_CHECK(extra_cfg, vmaf_motion_mult, 1, 1000);
+   RANGE_CHECK(extra_cfg, ssim_rd_mult, 1, 1000);
+-  RANGE_CHECK(extra_cfg, luma_bias, -15, 15);
++  RANGE_CHECK(extra_cfg, luma_bias, 0, 100);
+   RANGE_CHECK(extra_cfg, chroma_q_offset_u, -63, 63);
+   RANGE_CHECK(extra_cfg, chroma_q_offset_v, -63, 63);
+ #if CONFIG_TUNE_VMAF
+@@ -999,9 +1002,10 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
+ #if CONFIG_TUNE_VMAF
+   RANGE_CHECK(extra_cfg, vmaf_resize_factor, 0, 3);
+   RANGE_CHECK(extra_cfg, vmaf_rd_mult, 1, 1000);
+-  RANGE_CHECK(extra_cfg, tpl_rd_mult, 1, 1000);
+   RANGE_CHECK_BOOL(extra_cfg, vmaf_quantization);
+ #endif
++  RANGE_CHECK(extra_cfg, tpl_rd_mult, 1, 1000);
++  RANGE_CHECK(extra_cfg, luma_bias_power, 1, 4);
+   RANGE_CHECK_HI(extra_cfg, loopfilter_sharpness, 7);
+   RANGE_CHECK_BOOL(extra_cfg, enable_experimental_psy);
+   return AOM_CODEC_OK;
+@@ -1653,6 +1657,9 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
+ #endif
+ 
+   oxcf->tpl_rd_mult = extra_cfg->tpl_rd_mult;
++
++  oxcf->luma_bias_power = extra_cfg->luma_bias_power;
++
+   oxcf->sb_qp_sweep = extra_cfg->sb_qp_sweep;
+ 
+   oxcf->global_motion_method = extra_cfg->global_motion_method;
+@@ -4365,6 +4372,9 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
+   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tpl_rd_mult,
+                               argv, err_string)) {
+     extra_cfg.tpl_rd_mult = arg_parse_int_helper(&arg, err_string);
++  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.luma_bias_power,
++                              argv, err_string)) {
++    extra_cfg.luma_bias_power = arg_parse_int_helper(&arg, err_string);
+   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tile_height, argv,
+                               err_string)) {
+     ctx->cfg.tile_height_count = arg_parse_list_helper(
+@@ -4581,6 +4591,13 @@ static aom_codec_err_t ctrl_set_tpl_rd_mult(aom_codec_alg_priv_t *ctx,
+   return update_extra_cfg(ctx, &extra_cfg);
+ }
+ 
++static aom_codec_err_t ctrl_set_luma_bias_power(aom_codec_alg_priv_t *ctx,
++                                          va_list args) {
++  struct av1_extracfg extra_cfg = ctx->extra_cfg;
++  extra_cfg.luma_bias_power = CAST(AOME_SET_LUMA_BIAS_POWER, args);
++  return update_extra_cfg(ctx, &extra_cfg);
++}
++
+ static aom_codec_err_t ctrl_get_num_operating_points(aom_codec_alg_priv_t *ctx,
+                                                      va_list args) {
+   int *const arg = va_arg(args, int *);
+@@ -4756,6 +4773,7 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
+   { AOME_SET_VMAF_RESIZE_FACTOR, ctrl_set_vmaf_resize_factor },
+   { AOME_SET_VMAF_RD_MULT, ctrl_set_vmaf_rd_mult },
+   { AOME_SET_TPL_RD_MULT, ctrl_set_tpl_rd_mult },
++  { AOME_SET_LUMA_BIAS_POWER, ctrl_set_luma_bias_power },
+   { AV1E_SET_QUANTIZER_ONE_PASS, ctrl_set_quantizer_one_pass },
+ 
+   // Getters
+diff --git a/av1/common/av1_rtcd_defs.pl b/av1/common/av1_rtcd_defs.pl
+index 39c477a01..30d69c127 100644
+--- a/av1/common/av1_rtcd_defs.pl
++++ b/av1/common/av1_rtcd_defs.pl
+@@ -402,10 +402,10 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
+   # Motion search
+   #
+   if (aom_config("CONFIG_REALTIME_ONLY") ne "yes") {
+-    add_proto qw/void av1_apply_temporal_filter/, "const struct yv12_buffer_config *frame_to_filter, const struct macroblockd *mbd, const BLOCK_SIZE block_size, const int mb_row, const int mb_col, const int num_planes, const double *noise_levels, const MV *subblock_mvs, const int *subblock_mses, const int q_factor, const int filter_strength, int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum, uint16_t *count";
++    add_proto qw/void av1_apply_temporal_filter/, "const struct yv12_buffer_config *frame_to_filter, const struct macroblockd *mbd, const BLOCK_SIZE block_size, const int mb_row, const int mb_col, const int num_planes, const double *noise_levels, const MV *subblock_mvs, const int *subblock_mses, const int q_factor, const double filter_strength, int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum, uint16_t *count";
+     specialize qw/av1_apply_temporal_filter sse2 avx2 neon/;
+     if (aom_config("CONFIG_AV1_HIGHBITDEPTH") eq "yes") {
+-      add_proto qw/void av1_highbd_apply_temporal_filter/, "const struct yv12_buffer_config *frame_to_filter, const struct macroblockd *mbd, const BLOCK_SIZE block_size, const int mb_row, const int mb_col, const int num_planes, const double *noise_levels, const MV *subblock_mvs, const int *subblock_mses, const int q_factor, const int filter_strength, int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum, uint16_t *count";
++      add_proto qw/void av1_highbd_apply_temporal_filter/, "const struct yv12_buffer_config *frame_to_filter, const struct macroblockd *mbd, const BLOCK_SIZE block_size, const int mb_row, const int mb_col, const int num_planes, const double *noise_levels, const MV *subblock_mvs, const int *subblock_mses, const int q_factor, const double filter_strength, int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum, uint16_t *count";
+       specialize qw/av1_highbd_apply_temporal_filter sse2 avx2/;
+     }
+   }
+diff --git a/av1/encoder/arm/neon/temporal_filter_neon.c b/av1/encoder/arm/neon/temporal_filter_neon.c
+index a287ffeff..7952cabce 100644
+--- a/av1/encoder/arm/neon/temporal_filter_neon.c
++++ b/av1/encoder/arm/neon/temporal_filter_neon.c
+@@ -352,7 +352,7 @@ void av1_apply_temporal_filter_neon(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_levels, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum,
+     uint16_t *count) {
+   const int is_high_bitdepth = frame_to_filter->flags & YV12_FLAG_HIGHBITDEPTH;
+diff --git a/av1/encoder/encodeframe_utils.c b/av1/encoder/encodeframe_utils.c
+index f5c42270a..0b372f87c 100644
+--- a/av1/encoder/encodeframe_utils.c
++++ b/av1/encoder/encodeframe_utils.c
+@@ -16,6 +16,7 @@
+ #include "av1/encoder/encoder.h"
+ #include "av1/encoder/encodeframe_utils.h"
+ #include "av1/encoder/rdopt.h"
++#include "aq_variance.h"
+ 
+ void av1_set_ssim_rdmult(const AV1_COMP *const cpi, int *errorperbit,
+                          const BLOCK_SIZE bsize, const int mi_row,
+diff --git a/av1/encoder/encoder.h b/av1/encoder/encoder.h
+index f3472c225..f5a39b793 100644
+--- a/av1/encoder/encoder.h
++++ b/av1/encoder/encoder.h
+@@ -1152,6 +1152,8 @@ typedef struct AV1EncoderConfig {
+ 
+   int tpl_rd_mult;
+ 
++  int luma_bias_power;
++
+   // A flag to control if we enable the superblock qp sweep for a given lambda
+   int sb_qp_sweep;
+ 
+diff --git a/av1/encoder/encoder_utils.c b/av1/encoder/encoder_utils.c
+index 0b91dcdd3..286f11178 100644
+--- a/av1/encoder/encoder_utils.c
++++ b/av1/encoder/encoder_utils.c
+@@ -1419,6 +1419,14 @@ void av1_set_mb_ssim_rdmult_scaling(AV1_COMP *cpi) {
+                ++blk_col) {
+             const int index = blk_row * num_cols + blk_col;
+             cpi->ssim_rdmult_scaling_factors[index] /= log_sum_sb;
++            if (cpi->oxcf.enable_experimental_psy == 1) { // Additional psy modulation?? Test more! Visual: https://www.desmos.com/calculator/mq5fqbfdne
++              if (cpi->ssim_rdmult_scaling_factors[index] <= 1.0) {
++                cpi->ssim_rdmult_scaling_factors[index] = exp(cpi->ssim_rdmult_scaling_factors[index] * cpi->ssim_rdmult_scaling_factors[index] - 1.0);
++              } else {
++                //*weight = log(*weight) + 1.0;
++                cpi->ssim_rdmult_scaling_factors[index] = sqrt(log(cpi->ssim_rdmult_scaling_factors[index]) + 0.01) + 0.9;
++              }
++            }
+           }
+         }
+       }
+@@ -1435,6 +1443,16 @@ void av1_set_mb_ssim_rdmult_scaling(AV1_COMP *cpi) {
+       for (int col = 0; col < num_cols; ++col) {
+         const int index = row * num_cols + col;
+         cpi->ssim_rdmult_scaling_factors[index] /= log_sum;
++
++        if (cpi->oxcf.enable_experimental_psy == 1) { // Additional psy modulation?? Test more! Visual: https://www.desmos.com/calculator/mq5fqbfdne
++          if (cpi->ssim_rdmult_scaling_factors[index] <= 1.0) {
++            cpi->ssim_rdmult_scaling_factors[index] = exp(cpi->ssim_rdmult_scaling_factors[index] * cpi->ssim_rdmult_scaling_factors[index] - 1.0);
++          } else {
++            //*weight = log(*weight) + 1.0;
++            cpi->ssim_rdmult_scaling_factors[index] = sqrt(log(cpi->ssim_rdmult_scaling_factors[index]) + 0.01) + 0.9;
++          }
++        }
++
+       }
+     }
+   }
+diff --git a/av1/encoder/partition_search.c b/av1/encoder/partition_search.c
+index 43a17c755..22faff0c0 100644
+--- a/av1/encoder/partition_search.c
++++ b/av1/encoder/partition_search.c
+@@ -689,7 +689,7 @@ static void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
+     x->rdmult = (int)(((int64_t)x->rdmult * x->intra_sb_rdmult_modifier) >> 7);
+   }
+ 
+-  if (cpi->oxcf.luma_bias != 0) {
++  if (cpi->oxcf.luma_bias != 0 || (cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY && cpi->oxcf.luma_bias == 0)) {
+     int avg_brightness;
+     BitDepthInfo bd_info = get_bit_depth_info(&x->e_mbd);
+     if (bd_info.use_highbitdepth_buf) {
+@@ -699,7 +699,12 @@ static void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
+       avg_brightness = av1_log_block_avg(x, bsize);
+     }
+     double luma_adjustment = 0;
+-    luma_adjustment = 1.0 - ((double) avg_brightness / (5100.0 / (double) cpi->oxcf.luma_bias));
++    if (cpi->oxcf.luma_bias == 0 && cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY) {
++      luma_adjustment = cos( pow(((double)avg_brightness - 255.0) / (5100.0 / 17), 2));
++    } else {
++      luma_adjustment = cos( pow(((double)avg_brightness - 255.0) / (5100.0 / (10. + ((double)cpi->oxcf.luma_bias) / 8.) ), cpi->oxcf.luma_bias_power));
++    }
++    //luma_adjustment = 1.0 - ((double) avg_brightness / (5100.0 / (double) cpi->oxcf.luma_bias)); Old method
+     x->rdmult = (int) ((double) x->rdmult * luma_adjustment);
+   }
+ 
+diff --git a/av1/encoder/pass2_strategy.c b/av1/encoder/pass2_strategy.c
+index 38aa27e29..ae5d63c26 100644
+--- a/av1/encoder/pass2_strategy.c
++++ b/av1/encoder/pass2_strategy.c
+@@ -654,8 +654,8 @@ static int get_projected_gfu_boost(const PRIMARY_RATE_CONTROL *p_rc,
+   return projected_gfu_boost;
+ }
+ 
+-#define GF_MAX_BOOST 90.0
+-#define GF_MIN_BOOST 50
++#define GF_MAX_BOOST 30.0
++#define GF_MIN_BOOST 16
+ #define MIN_DECAY_FACTOR 0.01
+ int av1_calc_arf_boost(const TWO_PASS *twopass,
+                        const TWO_PASS_FRAME *twopass_frame,
+diff --git a/av1/encoder/rd.c b/av1/encoder/rd.c
+index bd986ebc9..db11e63a1 100644
+--- a/av1/encoder/rd.c
++++ b/av1/encoder/rd.c
+@@ -364,21 +364,21 @@ static const int rd_layer_depth_factor[7] = {
+ // The function here is a first pass estimate based on data from
+ // a previous Vizer run
+ static double def_inter_rd_multiplier(int qindex) {
+-  return 3.2 + (0.0015 * (double)qindex);
++  return 2.8 + (0.0015 * (double)qindex);
+ }
+ 
+ // Returns the default rd multiplier for ARF/Golden Frames for a given qindex.
+ // The function here is a first pass estimate based on data from
+ // a previous Vizer run
+ static double def_arf_rd_multiplier(int qindex) {
+-  return 3.25 + (0.0015 * (double)qindex);
++  return 3.2 + (0.0015 * (double)qindex);
+ }
+ 
+ // Returns the default rd multiplier for key frames for a given qindex.
+ // The function here is a first pass estimate based on data from
+ // a previous Vizer run
+ static double def_kf_rd_multiplier(int qindex) {
+-  return 3.3 + (0.0015 * (double)qindex);
++  return 3.25 + (0.0015 * (double)qindex);
+ }
+ 
+ int av1_compute_rd_mult_based_on_qindex(aom_bit_depth_t bit_depth,
+diff --git a/av1/encoder/speed_features.c b/av1/encoder/speed_features.c
+index a545eb404..cc3673e8b 100644
+--- a/av1/encoder/speed_features.c
++++ b/av1/encoder/speed_features.c
+@@ -2543,7 +2543,7 @@ void av1_set_speed_features_qindex_dependent(AV1_COMP *cpi, int speed) {
+   if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_PSY && (speed >=1 && speed <=3)){
+ 
+     const int qindex_thresh_cdef_sf_s1_s3_l1[2] = { 104, 64 };
+-    const int qindex_thresh_cdef_sf_s1_s3_l2[2] = { 92, 48 };
++    //const int qindex_thresh_cdef_sf_s1_s3_l2[2] = { 92, 48 };
+ 
+       //You already start at Level Q2, since we're already pruning at an equivalent L1
+       sf->lpf_sf.cdef_pick_method = CDEF_FULL_SEARCH_Q2;
+diff --git a/av1/encoder/temporal_filter.c b/av1/encoder/temporal_filter.c
+index 172d3868d..f7c1878de 100644
+--- a/av1/encoder/temporal_filter.c
++++ b/av1/encoder/temporal_filter.c
+@@ -565,7 +565,7 @@ void av1_apply_temporal_filter_c(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_levels, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum,
+     uint16_t *count) {
+   // Block information.
+@@ -726,7 +726,7 @@ void av1_highbd_apply_temporal_filter_c(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_levels, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum,
+     uint16_t *count) {
+   av1_apply_temporal_filter_c(frame_to_filter, mbd, block_size, mb_row, mb_col,
+@@ -827,7 +827,7 @@ void av1_tf_do_filtering_row(AV1_COMP *cpi, ThreadData *td, int mb_row) {
+   uint8_t *pred = tf_data->pred;
+ 
+   // Factor to control the filering strength.
+-  int filter_strength = cpi->oxcf.algo_cfg.arnr_strength;
++  double filter_strength = (double)cpi->oxcf.algo_cfg.arnr_strength;
+ 
+   // https://bugs.chromium.org/p/aomedia/issues/detail?id=3211 seems to be
+   // resolved by lowering the filtering strength to 1 on keyframes,
+@@ -837,7 +837,11 @@ void av1_tf_do_filtering_row(AV1_COMP *cpi, ThreadData *td, int mb_row) {
+   if (update_type == KF_UPDATE &&
+       cpi->oxcf.kf_cfg.enable_keyframe_filtering == 1 &&
+       cpi->oxcf.algo_cfg.arnr_strength >= 2) {
+-    filter_strength = 1;
++    filter_strength = 1.;
++  }
++
++  if (cpi->oxcf.tpl_rd_mult != 100) {
++    filter_strength *= (cpi->oxcf.tpl_rd_mult / 100.);
+   }
+ 
+   // Do filtering.
+diff --git a/av1/encoder/tpl_model.c b/av1/encoder/tpl_model.c
+index ca51af262..ed227b3f5 100644
+--- a/av1/encoder/tpl_model.c
++++ b/av1/encoder/tpl_model.c
+@@ -1869,7 +1869,7 @@ void av1_tpl_rdmult_setup(AV1_COMP *cpi) {
+       }
+       const double rk = intra_cost / mc_dep_cost;
+       const int index = row * num_cols + col;
+-      cpi->tpl_rdmult_scaling_factors[index] = ((rk / cpi->rd.r0) * cpi->oxcf.tpl_rd_mult / 100.0) + c;
++      cpi->tpl_rdmult_scaling_factors[index] = (rk / cpi->rd.r0) + c;
+     }
+   }
+ }
+diff --git a/av1/encoder/tune_butteraugli.c b/av1/encoder/tune_butteraugli.c
+index e323ba040..ef41fb4cc 100644
+--- a/av1/encoder/tune_butteraugli.c
++++ b/av1/encoder/tune_butteraugli.c
+@@ -37,7 +37,7 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+   const int height = source->y_crop_height;
+   const int ss_x = source->subsampling_x;
+   const int ss_y = source->subsampling_y;
+-  const MACROBLOCKD *const xd = &cpi->td.mb.e_mbd;
++  //const MACROBLOCKD *const xd = &cpi->td.mb.e_mbd;
+   cpi->butteraugli_info.total_dbutteraugli = 0.0f;
+   /*const int resize_factor = (cpi->oxcf.butteraugli_resize_factor == 0)
+                                 ? 1
+@@ -79,7 +79,7 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+     aom_internal_error(cm->error, AOM_CODEC_MEM_ERROR,
+                        "Error allocating butteraugli data");
+   }*/
+-  //printf("num_cols: %d\n", num_cols);
++  //printf("block_w: %d, num_cols: %d\n", block_w, num_cols);
+ 
+   if (cm->seq_params->use_highbitdepth)
+   {
+@@ -89,30 +89,31 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+         const int index = row * num_cols + col;
+         const int y_start = row * block_h;
+         const int x_start = col * block_w;
+-        double var = 0.0, num_of_var = 0.0, var_log = 0.0;
++        //double var = 0.0, num_of_var = 0.0, var_log = 0.0;
+         //printf("index: %d\n", index);
+         float dbutteraugli = 0.0f;
+         float exp_butteraugli = 0.0f;
+-        float dmse = 0.0f;
++        float dmse = 0.0f, num_of_mse = 0.0f;
+         float px_count = 0.0f;
+         float qbutteraugli = 0.0f;
+ 
+         // Loop through each pixel in the block
+         for (int mi_row = y_start; // mi_row is equal to pixel array's location to resized source
+-             mi_row < y_start + block_h && mi_row < height; // Loop until we hit block's max height or video's max height
++             mi_row < y_start + (block_h) && mi_row < height; // Loop until we hit block's max height or video's max height
+              mi_row++) {
+           for (int mi_col = x_start; 
+-               mi_col < x_start + block_w && mi_col < width;
++               mi_col < x_start + (block_w) && mi_col < width;
+                mi_col++) {
+             //printf("mi_row: %d, mi_col: %d\n", mi_row, mi_col);
+             float score = diffmap[mi_row * width + mi_col];
+             dbutteraugli += powf(score, 12.f); // Compress scoring, better metric results and more consistent rdmult
+             exp_butteraugli += score; // Add only the normal score to divide by px_count later.
+-            qbutteraugli += score; // give qbutteraugli the raw score
++            //qbutteraugli += score; // give qbutteraugli the raw score
+             //printf("dbutteraugli: %f\n", dbutteraugli);
+-            float px_diff = CONVERT_TO_SHORTPTR(source->y_buffer)[mi_row * source->y_stride + mi_col] -
+-                            CONVERT_TO_SHORTPTR(recon->y_buffer)[mi_row * recon->y_stride + mi_col];
++            float px_diff = CONVERT_TO_SHORTPTR(source->y_buffer)[(mi_row) * source->y_stride + (mi_col)] -
++                            CONVERT_TO_SHORTPTR(recon->y_buffer)[(mi_row) * recon->y_stride + (mi_col)];
+             dmse += px_diff * px_diff;
++            num_of_mse += 1.0f;
+             px_count += 1.0f;
+             //printf("mi_row: %d, mi_col: %d,   score: %f\n", mi_row, mi_col, score);
+           }
+@@ -128,8 +129,20 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+         the qbutteraugli to ensure similar scores with each different resize factor. Rather naive and needs a better implementation.
+         https://www.desmos.com/calculator/e7tzvn9ag0 for a resize-factor=2 example of pixel scores equal to 1.0 each
+         */
+-        qbutteraugli = 1.0f + tanhf(((qbutteraugli / (6 - cpi->oxcf.butteraugli_resize_factor)) - 1.0f) * 0.1f) * (10.0f - 1.0f); // Normalize qbutter here
++        //qbutteraugli = 1.0f + tanhf(((qbutteraugli / (6 - cpi->oxcf.butteraugli_resize_factor)) - 1.0f) * 0.1f) * (10.0f - 1.0f); // Normalize qbutter here
+ 
++        /*for (int mi_row = y_start; // mi_row is equal to pixel array's location to cpi/main video source in blocks
++            mi_row < (row + 1) * (block_h) && mi_row < (height >> 1); // Loop until we hit block's max height or video's max height
++            mi_row++) {
++          for (int mi_col = x_start;
++              mi_col < (col + 1) * (block_w) && mi_col < (width >> 1);
++              mi_col++) {
++            float px_diff = CONVERT_TO_SHORTPTR(source->y_buffer)[mi_row * source->y_stride + mi_col] -
++                            CONVERT_TO_SHORTPTR(recon->y_buffer)[mi_row * recon->y_stride + mi_col];
++            dmse += px_diff * px_diff;
++            num_of_mse += 1.0f;
++          }
++        }*/
+         const int y_end = AOMMIN((y_start >> ss_y) + (block_h >> ss_y),
+                                 (height + ss_y) >> ss_y);
+         for (int y = y_start >> ss_y; y < y_end; y++) {
+@@ -144,31 +157,32 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+             const float px_diff_v = (float)(CONVERT_TO_SHORTPTR(source->v_buffer)[src_px_index] -
+                                             CONVERT_TO_SHORTPTR(recon->v_buffer)[recon_px_index]);
+             dmse += px_diff_u * px_diff_u + px_diff_v * px_diff_v;
+-            px_count += 2.0f;
++            num_of_mse += 2.0f;
+           }
+         }
+-
+-        for (int mi_row = y_start; // mi_row is equal to pixel array's location to cpi/main video source in blocks
+-            mi_row < (row + 1) * block_h && mi_row < height; // Loop until we hit block's max height or video's max height
+-            mi_row++) {
+-          for (int mi_col = x_start;
+-              mi_col < (col + 1) * block_w && mi_col < width;
+-              mi_col++) {
+-            struct buf_2d buf;
+-            const int row_offset_y = mi_row << 2; // Get pixel offset
+-            const int col_offset_y = mi_col << 2;
+-            //printf("mi_row: %d, mi_col: %d\n", mi_row, mi_col);
+-            buf.buf = cpi->source->y_buffer + row_offset_y * cpi->source->y_stride + col_offset_y;
+-            buf.stride = cpi->source->y_stride;
+-
+-            double blk_var;
+-            blk_var = av1_get_perpixel_variance_facade(cpi, xd, &buf, BLOCK_4X4, // Use 4X4 block for variance as we stride through the block by 4 pixels
+-                                                    AOM_PLANE_Y);
+-            var_log += log(AOMMAX(blk_var, 1));
+-            var += blk_var;
+-            num_of_var += 1.0;
++        /*if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_EXPERIMENTAL) {
++          for (int mi_row = row * num_mi_h; // mi_row is equal to pixel array's location to cpi/main video source in blocks
++              mi_row < (row + 1) * (num_mi_h) && mi_row < mi_params->mi_rows; // Loop until we hit block's max height or video's max height
++              mi_row += 4) {
++            for (int mi_col = col * num_mi_w;
++                mi_col < (col + 1) * (num_mi_w) && mi_col < mi_params->mi_cols;
++                mi_col += 4) {
++              struct buf_2d buf;
++              const int row_offset_y = mi_row << 2; // Get pixel offset
++              const int col_offset_y = mi_col << 2;
++              //printf("mi_row: %d, mi_col: %d\n", row_offset_y, col_offset_y);
++              buf.buf = cpi->source->y_buffer + row_offset_y * cpi->source->y_stride + col_offset_y;
++              buf.stride = cpi->source->y_stride;
++
++              double blk_var;
++              blk_var = av1_get_perpixel_variance_facade(cpi, xd, &buf, BLOCK_16X16, // Use 4X4 block for variance as we stride through the block by 4 pixels
++                                                      AOM_PLANE_Y);
++              var_log += log(AOMMAX(blk_var, 1));
++              var += blk_var;
++              num_of_var += 1.0;
++            }
+           }
+-        }
++        }*/
+         //printf("y_start: %d\n", y_start);
+         //printf("x_start: %d\n", x_start);
+         //dbutteraugli = powf(dbutteraugli, 1.0f / 12.0f);
+@@ -182,68 +196,83 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+         cpi->ppi->fn_ptr[rdo_bsize].vf(src_buf, source->y_stride,
+                                               rec_buf, recon->y_stride,
+                                               &sses[index]);*/
+-        dmse = dmse / px_count;
+-        //if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_EXPERIMENTAL) {
+-        //var = exp(var_log / num_of_var);
+-        //} else {
+-        var = var / num_of_var;
+-        //}
++        dmse = dmse / num_of_mse;
++        /*if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_EXPERIMENTAL) {
++          var = var / num_of_var;
++        }*/
+         //qbutteraugli = (float)(dmse + var) / qbutteraugli;
+         cpi->butteraugli_info.total_dbutteraugli += qbutteraugli;
+         cpi->butteraugli_info.blk_count += 1.0;
+         //printf("qbutteraugli: %f\n", qbutteraugli);
+         //printf("pxcount: %f\n", px_count);
+         const float eps = 0.01f;
+-        //printf("sses: %f\n", (float)sses[index])
+-        /*const float mse =
+-          (float)sses[index] / (float)(px_count * 2);*/
++        //float dmse = (float)sses[index];
++        //dmse = dmse / px_count;
++        //printf("dmse: %f\n", dmse);
+         //printf("mse: %f", mse);
+         //printf("dbutteraugli: %f   y_start: %d   x_start:   %d\n", dbutteraugli, y_start, x_start);
+         double weight;
+-        double quant_block_weight;
+-        if (dbutteraugli < eps || dmse < eps) { // Don't use mse for getting null block weight, slightly better efficiency?
++        //double quant_block_weight;
++
++        // Make following if statement more readable
++        const bool standard_tuning = cpi->oxcf.tune_cfg.tuning == (AOM_TUNE_BUTTERAUGLI);
++
++        if ((standard_tuning && (dbutteraugli < eps || dmse < eps)) || // If tune=butter/lavish and vars are less than epsilon
++          (!standard_tuning && (dbutteraugli < eps))) { // If tune=experimental and var is less than epsilon
+           weight = -1.0;
+-          quant_block_weight = -1.0;
++          //quant_block_weight = -1.0;
+         } else {
+           blk_count += 1.0;
+           //weight = powf(dmse / dbutteraugli, 1.0f / 12.0f);
+           //weight = powf(dmse / dbutteraugli, 1.0f / px_count);
+           //weight = log(powf(dbutteraugli, 2.0f));
+           //weight = 5*(1 - exp(-0.00625*dbutteraugli))+1.0;
+-          if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_EXPERIMENTAL) {
++          if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_EXPERIMENTAL || cpi->oxcf.tune_cfg.tuning == AOM_TUNE_LAVISH) {
+             //double hq_level = 96;
+             //int cq_level = *xd->qindex;
+             /*double delta =
+               cq_level < hq_level
+                   ? 0.25 * (double)(hq_level - cq_level) / hq_level
+                   : 3.333 * (double)(cq_level - hq_level) / (MAXQ - hq_level);*/
+-            weight = (double)exp_butteraugli; // variance over average butteraugli score for block
++            weight = (double)dbutteraugli; // variance over average butteraugli score for block
+             //weight = 39.126 * (1 - exp(-0.0009413 * weight)) + 1.236 + delta; // IPQ-like curve
+-            weight = 13.4 * (1.0 - exp(-0.03 * weight)) + 1.6;
++            //weight = 6.0 * (1.0 - exp(-0.05 * weight)) + 0.8;
++            //weight = 67.035434 * (1 - exp(-0.0021489 * weight)) + 17.492222; // SSIM-like curve
+             //weight = AOMMIN(weight, 15.0); // Remove or increase, possibly?
+-            //weight = AOMMIN(weight, 10.0);
+-            //weight += 0.8; // Balances things out a bit towards 1.0 in later geom_mean_of_scale variable(?)
++            //weight = AOMMIN(weight, 5.0);
++            weight = 6.0 * atan(weight / 4.0);
++            weight += 0.4; // Balances things out a bit towards 1.0 in later geom_mean_of_scale variable(?)
++            //printf("Weight: %f\n",weight);
+           } else {
+             weight = dmse / (double)dbutteraugli; // dbutter / dbutter + variance, calm the curve using power function
+-            //weight = 8.4 * (1.0 - exp(-0.00021489 * weight)) + 1.6; // VMAF-like curve, fitted to 1.6-10.0
+-            //weight = 67.035434 * (1 - exp(-0.021489 * weight)) + 17.492222; // SSIM-like curve
++            weight = 6.0 * (1.0 - exp(-0.05 * weight)) + 0.3; // Curve fitting to ~0.9516 - 10, modified from stock linear 0.3-5 cutoff.
++            /*
++            Notes on weights:
++              * Higher weights obtain lower rdmult in the end calculation
++              * MSE / Butteraugli weighting should be linear near the beginning of the curve for proper low-contrast detail rdmult adjustment
++              * Compressing the higher scores using a curve should help with having a more stable rdmult
++              * 
++            */
+             //weight += 10.0;
+-            weight = AOMMIN(weight, 5.0);
+-            weight += 0.3; // Balances things out a bit towards 1.0 in later geom_mean_of_scale variable(?)
++            //weight = AOMMIN(weight, 5.0);
++            //weight += 15.5; // Balances things out a bit towards 1.0 in later geom_mean_of_scale variable(?)
++            //weight = 4.0 * atan(weight / 3.0);
++            //weight += 0.4; // Balances things out a bit towards 1.0 in later geom_mean_of_scale variable(?)
++            //printf("Weight: %f\n",weight);
+           }
+-          //printf("var: %f   dbutteraugli: %f   weight: %f\n", var, dbutteraugli, weight);
+           //weight = AOMMIN(weight, 5.0);
+           /*if (cpi->oxcf.enable_experimental_psy == 0) {
+             weight += K;
+           }*/
+-          quant_block_weight = pow((var + qbutteraugli) / qbutteraugli, 0.25);
++          //quant_block_weight = pow((qbutteraugli) / qbutteraugli, 0.25);
+           //quant_block_weight = (double)dbutteraugli / ((dmse + var) + (double)dbutteraugli);
+-          //printf("dmse: %f,   var: %f,  dbutteraugli: %f   weight: %f\n", dmse, var, dbutteraugli, weight);
++          //printf("dmse: %f,   dbutteraugli: %f   weight: %f\n", dmse, dbutteraugli, weight);
+           log_sum += log(weight);
+-          quant_log_sum += log(quant_block_weight);
++          //quant_log_sum += log(quant_block_weight);
+         }
++        //printf("dbutteraugli: %f   weight: %f   x_start: %d\n", dbutteraugli, weight, x_start);
+         cpi->butteraugli_info.rdmult_scaling_factors[index] = weight;
+-        cpi->butteraugli_info.quant_scaling_factors[index] = quant_block_weight;
++        //cpi->butteraugli_info.quant_scaling_factors[index] = quant_block_weight;
+       }
+     //printf("row: %d\n", row);
+     }
+@@ -321,12 +350,20 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+       } else {
+         *quant_weight /= quant_log_sum;
+       }*/
+-      *weight = AOMMIN(*weight, 2.5);
+-      *weight = AOMMAX(*weight, 0.4);
++      if (cpi->oxcf.enable_experimental_psy == 1) { // Additional psy modulation?? Test more! Visual: https://www.desmos.com/calculator/mq5fqbfdne
++        if (*weight <= 1.0) {
++          *weight = exp(*weight * *weight - 1.0);
++        } else {
++          //*weight = log(*weight) + 1.0;
++          *weight = sqrt(log(*weight) + 0.01) + 0.9;
++        }
++      }
++      //*weight = AOMMIN(*weight, 2.5);
++      //*weight = AOMMAX(*weight, 0.4);
+       //printf("weight: %f\n", *weight);
+     }
+   }
+-  if (cpi->oxcf.butteraugli_quant_mult > 0 || cpi->oxcf.butteraugli_quant_mult_pos >= 0 || cpi->oxcf.butteraugli_quant_mult_neg >= 0) {
++  /*if (cpi->oxcf.butteraugli_quant_mult > 0 || cpi->oxcf.butteraugli_quant_mult_pos >= 0 || cpi->oxcf.butteraugli_quant_mult_neg >= 0) { # To test later...
+     const int sb_size = cpi->common.seq_params->sb_size;
+     const int num_mi_w_sb = mi_size_wide[sb_size];
+     const int num_mi_h_sb = mi_size_high[sb_size];
+@@ -373,7 +410,7 @@ static void set_mb_butteraugli_rdmult_scaling(AV1_COMP *cpi,
+         }
+       }
+     }
+-  }
++  }*/
+   aom_free(diffmap);
+   //aom_free(sses);
+ }
+@@ -410,7 +447,7 @@ void av1_set_butteraugli_rdmult(const AV1_COMP *cpi, MACROBLOCK *x,
+       num_of_mi += 1.0;
+     }
+   }
+-  if (cpi->oxcf.butteraugli_quant_mult > 0 || cpi->oxcf.butteraugli_quant_mult_pos >= 0 || cpi->oxcf.butteraugli_quant_mult_neg >= 0) { // If butter quant is enabled in any form
++  /*if (cpi->oxcf.butteraugli_quant_mult > 0 || cpi->oxcf.butteraugli_quant_mult_pos >= 0 || cpi->oxcf.butteraugli_quant_mult_neg >= 0) { // If butter quant is enabled in any form
+     double quant_multiplier = 1.0; // Setup multiplier variable
+     double generic_scale = exp(quant_geom_mean_of_scale / num_of_mi); // Get generic scale without multiplier for if/then usage, 0 = 1.0 scale
+     if ((cpi->oxcf.butteraugli_quant_mult_pos >= 0) && (generic_scale < 1.0)) { // If pos quant is enabled and qindex scale > 1
+@@ -430,7 +467,7 @@ void av1_set_butteraugli_rdmult(const AV1_COMP *cpi, MACROBLOCK *x,
+     x->qindex = x->qindex + new_qindex; // Finally, update quantizer
+     new_qindex = AOMMIN(x->qindex, MAXQ); // Limit quantizer to video bounds
+     new_qindex = AOMMAX(x->qindex, MINQ);
+-  }
++  }*/
+   geom_mean_of_scale = exp((geom_mean_of_scale * cpi->oxcf.butteraugli_rd_mult / 100.0) / num_of_mi);
+   //printf("geom_mean_of_scale: %f\n", geom_mean_of_scale);
+   *rdmult = (int)((double)(*rdmult) * geom_mean_of_scale + 0.5);
+@@ -551,31 +588,32 @@ void av1_setup_butteraugli_source(AV1_COMP *cpi) {
+   }
+ }
+ 
+-// Write q adjustment code from frame dbutteraugli here
+-int av1_get_butteraugli_base_qindex(AV1_COMP *cpi, int current_qindex, int strength) {
++// Write q adjustment code from frame butteraugli distance here
++int av1_get_butteraugli_base_qindex(AV1_COMP *cpi, int current_qindex, int distance) {
+   const AV1_COMMON *const cm = &cpi->common;
+ 
+-  double frame_mult = (double)cpi->butteraugli_info.total_dbutteraugli/cpi->butteraugli_info.blk_count;
++  //double frame_mult = (double)cpi->butteraugli_info.distance; // Convert strength (user distance) against distance to multiplicative value for qindex
+   //frame_mult = AOMMIN(frame_mult, 10.0);
+   //frame_mult = AOMMAX(frame_mult, 0.4);
+   /*if (cpi->oxcf.enable_experimental_psy == 0) {
+     frame_mult = 1.0 + (1.0 - frame_mult);
+   }*/
+ 
+-  frame_mult = pow(frame_mult, ((double)strength / (cpi->oxcf.butteraugli_loop_count + 1.0)) / 100.0);
+-  if (cm->current_frame.frame_number == 0 || cpi->oxcf.pass == 1 || frame_mult < 0.01) {
++  //frame_mult = pow(frame_mult, ((double)strength / (cpi->oxcf.butteraugli_loop_count + 1.0)) / 100.0); // Adjust strength of multiplier
++  //frame_mult = log(frame_mult + 0.5) + 0.825; // Curve the distance
++  if (cm->current_frame.frame_number == 0 || cpi->oxcf.pass == 1) {
+     return current_qindex;
+   }
+   //const double total_dbutter = (double)cpi->butteraugli_info.total_dbutteraugli;
+   //const double average_dbutter = total_dbutter / (double)(num_cols * num_rows);
+ 
+-  // Get dbutter (beta) through wizard-level data fitting. Power function to calm the curve.
+-  //const double dbutter = pow( sqrt( sqrt(frame_mult) * sqrt(1.0 / 3.0))  , (0.5));
++  // Get frame_mult (qindex multiplier) through wizard-level data fitting. Power function to strengthen/weaken.
++  double frame_mult = sqrt( sqrt((double)cpi->butteraugli_info.distance) * sqrt(1.0 / ((double)distance / 10.)));
+ 
+   const int offset =
+       av1_get_deltaq_offset(cm->seq_params->bit_depth, current_qindex, frame_mult);
+   int qindex = current_qindex + offset;
+-
++  //printf("current_q: %d, offset: %d\n", current_qindex, offset);
+   qindex = AOMMIN(qindex, MAXQ);
+   qindex = AOMMAX(qindex, MINQ);
+   //printf("frame_mult: %f   current_qindex: %d   qindex: %d\n", frame_mult, current_qindex, qindex);
+diff --git a/av1/encoder/tx_search.c b/av1/encoder/tx_search.c
+index f00969795..23b8d9832 100644
+--- a/av1/encoder/tx_search.c
++++ b/av1/encoder/tx_search.c
+@@ -1092,10 +1092,13 @@ static INLINE void dist_block_tx_domain(MACROBLOCK *x, int plane, int block,
+   tran_low_t *const dqcoeff = p->dqcoeff + block_offset;
+ #if CONFIG_AV1_HIGHBITDEPTH
+   MACROBLOCKD *const xd = &x->e_mbd;
+-  if (is_cur_buf_hbd(xd)) {
++  if (is_cur_buf_hbd(xd) && (qmatrix == NULL || !x->txfm_search_params.use_qm_dist_metric)) {
+     // TODO(veluca): handle use_qm_dist_metric for HBD too.
+     *out_dist = av1_highbd_block_error(coeff, dqcoeff, buffer_length, &this_sse,
+                                        xd->bd);
++  } else if (is_cur_buf_hbd(xd)) {
++    *out_dist = av1_block_error_qm(coeff, dqcoeff, buffer_length, qmatrix,
++                                     scan, &this_sse);
+   } else {
+ #endif
+     if (qmatrix == NULL || !x->txfm_search_params.use_qm_dist_metric) {
+diff --git a/av1/encoder/x86/highbd_temporal_filter_avx2.c b/av1/encoder/x86/highbd_temporal_filter_avx2.c
+index 4cfc7c119..9624b4a4d 100644
+--- a/av1/encoder/x86/highbd_temporal_filter_avx2.c
++++ b/av1/encoder/x86/highbd_temporal_filter_avx2.c
+@@ -369,7 +369,7 @@ void av1_highbd_apply_temporal_filter_avx2(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_levels, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum,
+     uint16_t *count) {
+   const int is_high_bitdepth = frame_to_filter->flags & YV12_FLAG_HIGHBITDEPTH;
+diff --git a/av1/encoder/x86/highbd_temporal_filter_sse2.c b/av1/encoder/x86/highbd_temporal_filter_sse2.c
+index 90c682207..af53e5a03 100644
+--- a/av1/encoder/x86/highbd_temporal_filter_sse2.c
++++ b/av1/encoder/x86/highbd_temporal_filter_sse2.c
+@@ -244,7 +244,7 @@ void av1_highbd_apply_temporal_filter_sse2(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_levels, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum,
+     uint16_t *count) {
+   const int is_high_bitdepth = frame_to_filter->flags & YV12_FLAG_HIGHBITDEPTH;
+diff --git a/av1/encoder/x86/temporal_filter_avx2.c b/av1/encoder/x86/temporal_filter_avx2.c
+index c3d2ee0df..60e14c02c 100644
+--- a/av1/encoder/x86/temporal_filter_avx2.c
++++ b/av1/encoder/x86/temporal_filter_avx2.c
+@@ -248,7 +248,7 @@ void av1_apply_temporal_filter_avx2(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_levels, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum,
+     uint16_t *count) {
+   const int is_high_bitdepth = frame_to_filter->flags & YV12_FLAG_HIGHBITDEPTH;
+diff --git a/av1/encoder/x86/temporal_filter_sse2.c b/av1/encoder/x86/temporal_filter_sse2.c
+index 83538c509..81405c1b1 100644
+--- a/av1/encoder/x86/temporal_filter_sse2.c
++++ b/av1/encoder/x86/temporal_filter_sse2.c
+@@ -224,7 +224,7 @@ void av1_apply_temporal_filter_sse2(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_levels, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum,
+     uint16_t *count) {
+   const int is_high_bitdepth = frame_to_filter->flags & YV12_FLAG_HIGHBITDEPTH;
+diff --git a/test/temporal_filter_test.cc b/test/temporal_filter_test.cc
+index 2ef0fecbd..bbc113825 100644
+--- a/test/temporal_filter_test.cc
++++ b/test/temporal_filter_test.cc
+@@ -50,7 +50,7 @@ typedef void (*TemporalFilterFunc)(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_level, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum, uint16_t *count);
+ typedef libaom_test::FuncParam<TemporalFilterFunc> TemporalFilterFuncParam;
+ 
+@@ -179,7 +179,7 @@ void TemporalFilterTest::RunTest(int isRandom, int run_times,
+     const MV subblock_mvs[4] = { { 0, 0 }, { 5, 5 }, { 7, 8 }, { 2, 10 } };
+     const int subblock_mses[4] = { 15, 16, 17, 18 };
+     const int q_factor = 12;
+-    const int filter_strength = 5;
++    const double filter_strength = 5;
+     const int mb_row = 0;
+     const int mb_col = 0;
+     std::unique_ptr<YV12_BUFFER_CONFIG> frame_to_filter(new (std::nothrow)
+@@ -315,7 +315,7 @@ typedef void (*HBDTemporalFilterFunc)(
+     const YV12_BUFFER_CONFIG *frame_to_filter, const MACROBLOCKD *mbd,
+     const BLOCK_SIZE block_size, const int mb_row, const int mb_col,
+     const int num_planes, const double *noise_level, const MV *subblock_mvs,
+-    const int *subblock_mses, const int q_factor, const int filter_strength,
++    const int *subblock_mses, const int q_factor, const double filter_strength,
+     int tf_wgt_calc_lvl, const uint8_t *pred, uint32_t *accum, uint16_t *count);
+ typedef libaom_test::FuncParam<HBDTemporalFilterFunc>
+     HBDTemporalFilterFuncParam;
+@@ -448,7 +448,7 @@ void HBDTemporalFilterTest::RunTest(int isRandom, int run_times, int BD,
+     const MV subblock_mvs[4] = { { 0, 0 }, { 5, 5 }, { 7, 8 }, { 2, 10 } };
+     const int subblock_mses[4] = { 15, 16, 17, 18 };
+     const int q_factor = 12;
+-    const int filter_strength = 5;
++    const double filter_strength = 5;
+     const int mb_row = 0;
+     const int mb_col = 0;
+     std::unique_ptr<YV12_BUFFER_CONFIG> frame_to_filter(new (std::nothrow)
